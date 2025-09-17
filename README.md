@@ -105,14 +105,14 @@ Student login → Adaptive Diagnostic → Radar Report → Personalized Practice
 ```mermaid
 flowchart TD
     A[Student] -->|Diagnostic Test| B[Adaptive Engine]
-    B -->|Update Skills| C[Firestore DB]
+    B -->|Update Skills| C[(Firestore DB)]
     C --> D[Reports Service]
     D -->|Radar/Insights| E[Student Dashboard]
     D --> F[Teacher Dashboard]
     D --> G[Parent Dashboard]
     B --> H[Practice Generator]
     H -->|Tasks + Micro-lessons| E
-    H -->|LLM (optional)| I[(OpenAI API)]
+    H -->|LLM optional| I[(OpenAI API)]
 ```
 
 ---
