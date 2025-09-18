@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Brain, Target, TrendingUp, Users } from "lucide-react";
+import { Brain, Target, TrendingUp, Users, BarChart3 } from "lucide-react";
 import Link from "next/link";
 // import "./globals.css";
 
@@ -52,7 +52,10 @@ export default function LandingPage() {
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
             <Button size="lg" className="text-lg px-8 py-6" asChild>
-              <Link href="/login?role=student">Login as Student</Link>
+              <Link href="/login?role=student">
+                <Target className="mr-2 h-5 w-5" />
+                Login as Student
+              </Link>
             </Button>
             <Button
               size="lg"
@@ -60,7 +63,10 @@ export default function LandingPage() {
               className="text-lg px-8 py-6 bg-transparent"
               asChild
             >
-              <Link href="/login?role=teacher">Login as Teacher</Link>
+              <Link href="/login?role=teacher">
+                <Users className="mr-2 h-5 w-5" />
+                Login as Teacher
+              </Link>
             </Button>
             <Button
               size="lg"
@@ -68,8 +74,72 @@ export default function LandingPage() {
               className="text-lg px-8 py-6"
               asChild
             >
-              <Link href="/login?role=parent">Login as Parent</Link>
+              <Link href="/login?role=parent">
+                {" "}
+                <BarChart3 className="mr-2 h-5 w-5" />
+                Login as Parent
+              </Link>
             </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section id="features" className="py-20 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+              Four Learning Fundamentals
+            </h2>
+            <p className="text-xl text-gray-600">
+              Comprehensive assessment and practice for complete learning
+              mastery
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+            <div className="text-center p-6 bg-blue-50 rounded-xl">
+              <div className="w-12 h-12 bg-blue-600 rounded-lg mx-auto mb-4 flex items-center justify-center">
+                <span className="text-white font-bold">👂</span>
+              </div>
+              <h3 className="text-xl font-semibold mb-2">Listening Skills</h3>
+              <p className="text-gray-600">
+                Assess and improve auditory processing and comprehension
+                abilities
+              </p>
+            </div>
+
+            <div className="text-center p-6 bg-teal-50 rounded-xl">
+              <div className="w-12 h-12 bg-teal-600 rounded-lg mx-auto mb-4 flex items-center justify-center">
+                <span className="text-white font-bold">🧠</span>
+              </div>
+              <h3 className="text-xl font-semibold mb-2">Grasping Power</h3>
+              <p className="text-gray-600">
+                Evaluate comprehension speed and depth of understanding
+              </p>
+            </div>
+
+            <div className="text-center p-6 bg-purple-50 rounded-xl">
+              <div className="w-12 h-12 bg-purple-600 rounded-lg mx-auto mb-4 flex items-center justify-center">
+                <span className="text-white font-bold">💭</span>
+              </div>
+              <h3 className="text-xl font-semibold mb-2">Retention Power</h3>
+              <p className="text-gray-600">
+                Measure memory strength and information recall capabilities
+              </p>
+            </div>
+
+            <div className="text-center p-6 bg-green-50 rounded-xl">
+              <div className="w-12 h-12 bg-green-600 rounded-lg mx-auto mb-4 flex items-center justify-center">
+                <span className="text-white font-bold">⚡</span>
+              </div>
+              <h3 className="text-xl font-semibold mb-2">
+                Practice Application
+              </h3>
+              <p className="text-gray-600">
+                Test practical application and concept transfer skills
+              </p>
+            </div>
           </div>
         </div>
       </section>
