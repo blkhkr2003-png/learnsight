@@ -1,0 +1,81 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function hasRole(role) {
+      return isAuthenticated() && 
+             request.auth.token.role == role;
+    }
+    
+    function hasAnyRole(roles) {
+      return isAuthenticated() && 
+             request.auth.token.role in roles;
+    }
+    
+    function isAdmin() {
+      return hasRole('admin');
+    }
+    
+    function isTeacherOrAdmin() {
+      return hasAnyRole(['teacher', 'admin']);
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isTeacherOrAdmin();
+      allow write: if isOwner(userId) || isAdmin();
+    }
+
+    // Questions collection
+    match /questions/{questionId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Student skills - only server can write, users can read their own
+    match /studentSkills/{userId} {
+      allow read: if isOwner(userId) || isTeacherOrAdmin();
+      allow write: if false; // Only server (Admin SDK) can write
+    }
+
+    // Responses - users can read/write their own, teachers can read
+    match /responses/{responseId} {
+      allow read: if isAuthenticated() && 
+                     (resource.data.userId == request.auth.uid || 
+                      isTeacherOrAdmin());
+      allow create: if isAuthenticated() && 
+                       request.auth.uid == resource.data.userId;
+      allow update, delete: if false; // Responses are immutable
+    }
+
+    // Practice queues - only server can write, users can read their own
+    match /practiceQueues/{userId} {
+      allow read: if isOwner(userId) || isTeacherOrAdmin();
+      allow write: if false; // Only server (Admin SDK) can write
+    }
+
+    // LLM cache - only server can access
+    match /llm_cache/{cacheKey} {
+      allow read, write: if false; // Only server (Admin SDK) can access
+    }
+
+    // Diagnostic results
+    match /diagnosticResults/{userId} {
+      allow read: if isOwner(userId) || isTeacherOrAdmin();
+      allow write: if false; // Only server can write
+    }
+
+    // Default deny all other documents
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
