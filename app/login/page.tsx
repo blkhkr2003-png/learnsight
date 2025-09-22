@@ -30,6 +30,8 @@ import {
 import { Brain, Mail, Lock, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+const [showPopup, setShowPopup] = useState(false);
+const [popupMessage, setPopupMessage] = useState("");
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
@@ -60,68 +62,25 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      // Demo login
-      if (
-        (loginEmail === "ram@demo.com" && loginPassword === "password") ||
-        (loginEmail === "teacher@demo.com" && loginPassword === "password") ||
-        (loginEmail === "parent@demo.com" && loginPassword === "password")
-      ) {
-        let demoRole = "";
-        switch (loginEmail) {
-          case "ram@demo.com":
-            demoRole = "student";
-            break;
-          case "teacher@demo.com":
-            demoRole = "teacher";
-            break;
-          case "parent@demo.com":
-            demoRole = "parent";
-            break;
-        }
-        router.push(`/${demoRole}/dashboard`);
-        return;
-      }
-
-      // Firebase login
       const userCredential = await signInWithEmailAndPassword(
         auth,
         loginEmail,
         loginPassword
       );
-      const user = userCredential.user;
+      const idToken = await userCredential.user.getIdToken();
 
-      const userRef = doc(db, "users", user.uid);
-      const userDoc = await getDoc(userRef);
+      const res = await fetch("/api/auth/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
 
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        const userRole = userData.role;
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
 
-        await setDoc(
-          userRef,
-          { lastLogin: serverTimestamp() },
-          { merge: true }
-        );
-
-        switch (userRole) {
-          case "student":
-            router.push("/student/dashboard");
-            break;
-          case "teacher":
-            router.push("/teacher/dashboard");
-            break;
-          case "parent":
-            router.push("/parent/dashboard");
-            break;
-          default:
-            router.push("/student/dashboard");
-        }
-      } else {
-        throw new Error("User data not found in the database.");
-      }
-    } catch (error: any) {
-      console.error("Login failed:", errorMessage(error));
-      alert(errorMessage(error));
+      router.push(`/${data.role}/dashboard`);
+    } catch (err: any) {
+      alert(err.message);
     } finally {
       setIsLoading(false);
     }
@@ -134,21 +93,29 @@ export default function LoginPage() {
       const user = result.user;
 
       const userRef = doc(db, "users", user.uid);
-      const snapshot = await getDoc(userRef);
+      const userDoc = await getDoc(userRef);
 
-      if (!snapshot.exists()) {
+      if (!userDoc.exists()) {
+        const userRole = "student"; // Google signup only allows student for now
+        const isApproved = userRole === "student"; // true only for student
+
         await setDoc(userRef, {
           uid: user.uid,
           name: user.displayName ?? "",
           email: user.email ?? "",
-          role: "student",
+          role: userRole,
+          isApproved,
           createdAt: serverTimestamp(),
           lastLogin: serverTimestamp(),
         });
       } else {
         await setDoc(
           userRef,
-          { lastLogin: serverTimestamp() },
+          {
+            lastLogin: serverTimestamp(),
+            isApproved:
+              userDoc.data()?.isApproved ?? userDoc.data()?.role === "student",
+          },
           { merge: true }
         );
       }
@@ -158,6 +125,7 @@ export default function LoginPage() {
       console.error("Google login failed:", errorMessage(error));
       alert("Google login failed: " + errorMessage(error));
     } finally {
+      ``;
       setIsLoading(false);
     }
   };
@@ -173,40 +141,29 @@ export default function LoginPage() {
     }
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        signupEmail,
-        signupPassword
-      );
-      const user = userCredential.user;
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: signupName,
+          email: signupEmail,
+          password: signupPassword,
+          role,
+        }),
+      });
 
-      const userData = {
-        uid: user.uid,
-        name: signupName,
-        email: signupEmail,
-        role: role,
-        createdAt: serverTimestamp(),
-        lastLogin: serverTimestamp(),
-      };
+      const data = await res.json();
 
-      await setDoc(doc(db, "users", user.uid), userData);
+      if (data.error) throw new Error(data.error);
 
-      switch (role) {
-        case "student":
-          router.push("/student/dashboard");
-          break;
-        case "teacher":
-          router.push("/teacher/dashboard");
-          break;
-        case "parent":
-          router.push("/parent/dashboard");
-          break;
-        default:
-          router.push("/student/dashboard");
+      if (!data.isApproved) {
+        alert(
+          "Your registration was successful! Admin approval is required to activate your profile."
+        );
       }
-    } catch (error: any) {
-      console.error("Signup failed:", errorMessage(error));
-      alert(errorMessage(error));
+      router.push(`/${role}/dashboard`);
+    } catch (err: any) {
+      alert(err.message);
     } finally {
       setIsLoading(false);
     }
