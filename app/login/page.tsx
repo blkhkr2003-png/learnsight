@@ -30,8 +30,6 @@ import {
 import { Brain, Mail, Lock, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-const [showPopup, setShowPopup] = useState(false);
-const [popupMessage, setPopupMessage] = useState("");
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
@@ -41,6 +39,8 @@ export default function LoginPage() {
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
   const [role, setRole] = useState("");
+  const [showPopup, setShowPopup] = useState(false);
+  const [popupMessage, setPopupMessage] = useState("");
 
   const router = useRouter();
   const searchParams = useSearchParams();
