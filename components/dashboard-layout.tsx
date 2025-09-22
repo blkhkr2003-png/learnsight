@@ -2,6 +2,8 @@
 
 import type React from "react";
 
+import { signOut } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -30,11 +32,13 @@ export function DashboardLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const router = useRouter();
 
-  const handleLogout = () => {
-    // TODO: Implement Firebase Auth logout
-    // const auth = getAuth()
-    // signOut(auth)
-    router.push("/");
+  const handleLogout = async () => {
+    try {
+      await signOut(auth); // Firebase sign-out
+      router.push("/");
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
   };
 
   const SidebarContent = () => (

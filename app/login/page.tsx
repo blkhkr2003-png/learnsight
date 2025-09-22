@@ -1,8 +1,14 @@
 "use client";
 
 import type React from "react";
-
-import { useState } from "react";
+import { auth, googleProvider, db } from "@/lib/firebase";
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+} from "firebase/auth";
+import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -27,84 +33,196 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [signupName, setSignupName] = useState("");
+  const [signupEmail, setSignupEmail] = useState("");
+  const [signupPassword, setSignupPassword] = useState("");
   const [role, setRole] = useState("");
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const defaultRole = searchParams.get("role") || "";
 
-  // Initialize role from URL parameter
-  useState(() => {
+  useEffect(() => {
     if (defaultRole) {
       setRole(defaultRole);
     }
-  });
+  }, [defaultRole]);
+
+  const errorMessage = (err: unknown) =>
+    err && typeof err === "object" && "message" in err
+      ? (err as any).message
+      : String(err);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // TODO: Implement Firebase Auth login
-    // const auth = getAuth()
-    // await signInWithEmailAndPassword(auth, email, password)
+    try {
+      // Demo login
+      if (
+        (loginEmail === "ram@demo.com" && loginPassword === "password") ||
+        (loginEmail === "teacher@demo.com" && loginPassword === "password") ||
+        (loginEmail === "parent@demo.com" && loginPassword === "password")
+      ) {
+        let demoRole = "";
+        switch (loginEmail) {
+          case "ram@demo.com":
+            demoRole = "student";
+            break;
+          case "teacher@demo.com":
+            demoRole = "teacher";
+            break;
+          case "parent@demo.com":
+            demoRole = "parent";
+            break;
+        }
+        router.push(`/${demoRole}/dashboard`);
+        return;
+      }
 
-    // Simulate login delay
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Firebase login
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        loginEmail,
+        loginPassword
+      );
+      const user = userCredential.user;
 
-    // Route based on role
-    switch (role) {
-      case "student":
-        router.push("/student/dashboard");
-        break;
-      case "teacher":
-        router.push("/teacher/dashboard");
-        break;
-      case "parent":
-        router.push("/parent/dashboard");
-        break;
-      default:
-        router.push("/student/dashboard");
+      const userRef = doc(db, "users", user.uid);
+      const userDoc = await getDoc(userRef);
+
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        const userRole = userData.role;
+
+        await setDoc(
+          userRef,
+          { lastLogin: serverTimestamp() },
+          { merge: true }
+        );
+
+        switch (userRole) {
+          case "student":
+            router.push("/student/dashboard");
+            break;
+          case "teacher":
+            router.push("/teacher/dashboard");
+            break;
+          case "parent":
+            router.push("/parent/dashboard");
+            break;
+          default:
+            router.push("/student/dashboard");
+        }
+      } else {
+        throw new Error("User data not found in the database.");
+      }
+    } catch (error: any) {
+      console.error("Login failed:", errorMessage(error));
+      alert(errorMessage(error));
+    } finally {
+      setIsLoading(false);
     }
+  };
 
-    setIsLoading(false);
+  const handleGoogleLogin = async () => {
+    setIsLoading(true);
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const user = result.user;
+
+      const userRef = doc(db, "users", user.uid);
+      const snapshot = await getDoc(userRef);
+
+      if (!snapshot.exists()) {
+        await setDoc(userRef, {
+          uid: user.uid,
+          name: user.displayName ?? "",
+          email: user.email ?? "",
+          role: "student",
+          createdAt: serverTimestamp(),
+          lastLogin: serverTimestamp(),
+        });
+      } else {
+        await setDoc(
+          userRef,
+          { lastLogin: serverTimestamp() },
+          { merge: true }
+        );
+      }
+
+      router.push("/student/dashboard");
+    } catch (error: any) {
+      console.error("Google login failed:", errorMessage(error));
+      alert("Google login failed: " + errorMessage(error));
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // TODO: Implement Firebase Auth signup
-    // const auth = getAuth()
-    // await createUserWithEmailAndPassword(auth, email, password)
-    // await updateProfile(auth.currentUser, { displayName: name })
-
-    // Simulate signup delay
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    // Route based on role
-    switch (role) {
-      case "student":
-        router.push("/student/dashboard");
-        break;
-      case "teacher":
-        router.push("/teacher/dashboard");
-        break;
-      case "parent":
-        router.push("/parent/dashboard");
-        break;
-      default:
-        router.push("/student/dashboard");
+    if (!role) {
+      alert("Please select a role to continue.");
+      setIsLoading(false);
+      return;
     }
 
-    setIsLoading(false);
+    try {
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        signupEmail,
+        signupPassword
+      );
+      const user = userCredential.user;
+
+      const userData = {
+        uid: user.uid,
+        name: signupName,
+        email: signupEmail,
+        role: role,
+        createdAt: serverTimestamp(),
+        lastLogin: serverTimestamp(),
+      };
+
+      await setDoc(doc(db, "users", user.uid), userData);
+
+      switch (role) {
+        case "student":
+          router.push("/student/dashboard");
+          break;
+        case "teacher":
+          router.push("/teacher/dashboard");
+          break;
+        case "parent":
+          router.push("/parent/dashboard");
+          break;
+        default:
+          router.push("/student/dashboard");
+      }
+    } catch (error: any) {
+      console.error("Signup failed:", errorMessage(error));
+      alert(errorMessage(error));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleTabChange = () => {
+    setLoginEmail("");
+    setLoginPassword("");
+    setSignupEmail("");
+    setSignupPassword("");
+    setSignupName("");
   };
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        {/* Header */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2 mb-4">
             <Brain className="h-8 w-8 text-primary" />
@@ -130,13 +248,17 @@ export default function LoginPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="login" className="w-full">
+            <Tabs
+              defaultValue="login"
+              className="w-full"
+              onValueChange={handleTabChange}
+            >
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="login">Sign In</TabsTrigger>
                 <TabsTrigger value="signup">Sign Up</TabsTrigger>
               </TabsList>
 
-              <TabsContent value="login" className="space-y-4">
+              <TabsContent value="login" className="space-y-4 pt-4">
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="role-login">I am a...</Label>
@@ -151,7 +273,6 @@ export default function LoginPage() {
                       </SelectContent>
                     </Select>
                   </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="email-login">Email</Label>
                     <div className="relative">
@@ -160,14 +281,14 @@ export default function LoginPage() {
                         id="email-login"
                         type="email"
                         placeholder="Enter your email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        value={loginEmail}
+                        onChange={(e) => setLoginEmail(e.target.value)}
                         className="pl-10"
                         required
+                        autoComplete="username"
                       />
                     </div>
                   </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="password-login">Password</Label>
                     <div className="relative">
@@ -176,21 +297,52 @@ export default function LoginPage() {
                         id="password-login"
                         type="password"
                         placeholder="Enter your password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
                         className="pl-10"
                         required
+                        autoComplete="current-password"
                       />
                     </div>
                   </div>
-
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? "Signing in..." : "Sign In"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full flex items-center gap-2"
+                    onClick={handleGoogleLogin}
+                    disabled={isLoading}
+                  >
+                    <svg
+                      className="w-5 h-5"
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 48 48"
+                    >
+                      <path
+                        fill="#EA4335"
+                        d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C36.17 2.55 30.47 0 24 0 14.62 0 6.5 5.92 2.58 14.55l7.96 6.18C12.24 13.72 17.62 9.5 24 9.5z"
+                      />
+                      <path
+                        fill="#4285F4"
+                        d="M46.15 24.5c0-1.57-.14-3.08-.39-4.5H24v9h12.65c-.55 2.98-2.18 5.49-4.64 7.18l7.3 5.68C43.79 38.64 46.15 31.97 46.15 24.5z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M10.54 28.73A14.48 14.48 0 019.5 24c0-1.64.3-3.21.84-4.73l-7.96-6.18C.86 15.68 0 19.74 0 24c0 4.26.86 8.32 2.38 11.91l8.16-6.18z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M24 48c6.48 0 11.9-2.13 15.87-5.81l-7.3-5.68c-2.02 1.35-4.61 2.14-8.57 2.14-6.38 0-11.76-4.22-13.46-9.95l-8.16 6.18C6.5 42.08 14.62 48 24 48z"
+                      />
+                    </svg>
+                    Continue with Google
                   </Button>
                 </form>
               </TabsContent>
 
-              <TabsContent value="signup" className="space-y-4">
+              <TabsContent value="signup" className="space-y-4 pt-4">
                 <form onSubmit={handleSignup} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="role-signup">I am a...</Label>
@@ -205,7 +357,6 @@ export default function LoginPage() {
                       </SelectContent>
                     </Select>
                   </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="name-signup">Full Name</Label>
                     <div className="relative">
@@ -214,14 +365,14 @@ export default function LoginPage() {
                         id="name-signup"
                         type="text"
                         placeholder="Enter your full name"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
+                        value={signupName}
+                        onChange={(e) => setSignupName(e.target.value)}
                         className="pl-10"
                         required
+                        autoComplete="name"
                       />
                     </div>
                   </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="email-signup">Email</Label>
                     <div className="relative">
@@ -230,14 +381,14 @@ export default function LoginPage() {
                         id="email-signup"
                         type="email"
                         placeholder="Enter your email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        value={signupEmail}
+                        onChange={(e) => setSignupEmail(e.target.value)}
                         className="pl-10"
                         required
+                        autoComplete="username"
                       />
                     </div>
                   </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="password-signup">Password</Label>
                     <div className="relative">
@@ -246,21 +397,20 @@ export default function LoginPage() {
                         id="password-signup"
                         type="password"
                         placeholder="Create a password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
+                        value={signupPassword}
+                        onChange={(e) => setSignupPassword(e.target.value)}
                         className="pl-10"
                         required
+                        autoComplete="new-password"
                       />
                     </div>
                   </div>
-
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? "Creating account..." : "Create Account"}
                   </Button>
                 </form>
               </TabsContent>
             </Tabs>
-
             <div className="mt-6 text-center">
               <Link
                 href="/"
@@ -272,7 +422,6 @@ export default function LoginPage() {
           </CardContent>
         </Card>
 
-        {/* Demo Credentials */}
         <Card className="mt-4 border-border bg-muted/30">
           <CardContent className="pt-6">
             <h3 className="font-semibold text-sm text-card-foreground mb-2">
