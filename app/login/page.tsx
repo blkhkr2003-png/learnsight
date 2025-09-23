@@ -1,6 +1,8 @@
+// app/login/page.tsx
 "use client";
 
-import type React from "react";
+import React, { useEffect, useState } from "react";
+import type { UserDoc, Role } from "@/types";
 import { auth, googleProvider, db } from "@/lib/firebase";
 import {
   createUserWithEmailAndPassword,
@@ -8,8 +10,10 @@ import {
   signInWithPopup,
 } from "firebase/auth";
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
-import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
+
+/* --- component --- */
 import {
   Card,
   CardContent,
@@ -29,9 +33,6 @@ import {
 } from "@/components/ui/select";
 import { Brain, Mail, Lock, User } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-const [showPopup, setShowPopup] = useState(false);
-const [popupMessage, setPopupMessage] = useState("");
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
@@ -40,16 +41,14 @@ export default function LoginPage() {
   const [signupName, setSignupName] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
-  const [role, setRole] = useState("");
+  const [role, setRole] = useState<Role | "">("");
 
   const router = useRouter();
   const searchParams = useSearchParams();
   const defaultRole = searchParams.get("role") || "";
 
   useEffect(() => {
-    if (defaultRole) {
-      setRole(defaultRole);
-    }
+    if (defaultRole) setRole(defaultRole as Role);
   }, [defaultRole]);
 
   const errorMessage = (err: unknown) =>
@@ -78,6 +77,13 @@ export default function LoginPage() {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
 
+      // If not approved, we can show a message or route to a waiting page
+      if (!data.isApproved) {
+        alert("Your account is waiting for admin approval.");
+        setIsLoading(false);
+        return;
+      }
+
       router.push(`/${data.role}/dashboard`);
     } catch (err: any) {
       alert(err.message);
@@ -99,7 +105,7 @@ export default function LoginPage() {
         const userRole = "student"; // Google signup only allows student for now
         const isApproved = userRole === "student"; // true only for student
 
-        await setDoc(userRef, {
+        const userData: Partial<UserDoc> = {
           uid: user.uid,
           name: user.displayName ?? "",
           email: user.email ?? "",
@@ -107,7 +113,9 @@ export default function LoginPage() {
           isApproved,
           createdAt: serverTimestamp(),
           lastLogin: serverTimestamp(),
-        });
+        };
+
+        await setDoc(userRef, userData);
       } else {
         await setDoc(
           userRef,
@@ -153,7 +161,6 @@ export default function LoginPage() {
       });
 
       const data = await res.json();
-
       if (data.error) throw new Error(data.error);
 
       if (!data.isApproved) {
@@ -163,7 +170,7 @@ export default function LoginPage() {
       }
       router.push(`/${role}/dashboard`);
     } catch (err: any) {
-      alert(err.message);
+      alert("Signup failed: " + errorMessage(err));
     } finally {
       setIsLoading(false);
     }
@@ -219,7 +226,12 @@ export default function LoginPage() {
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="role-login">I am a...</Label>
-                    <Select value={role} onValueChange={setRole} required>
+                    <Select
+                      value={role}
+                      onValueChange={(value) => setRole(value as Role)}
+                      required
+                    >
+                      {" "}
                       <SelectTrigger>
                         <SelectValue placeholder="Select your role" />
                       </SelectTrigger>
@@ -303,7 +315,12 @@ export default function LoginPage() {
                 <form onSubmit={handleSignup} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="role-signup">I am a...</Label>
-                    <Select value={role} onValueChange={setRole} required>
+                    <Select
+                      value={role}
+                      onValueChange={(value) => setRole(value as Role)}
+                      required
+                    >
+                      {" "}
                       <SelectTrigger>
                         <SelectValue placeholder="Select your role" />
                       </SelectTrigger>
