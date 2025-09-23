@@ -8,6 +8,7 @@ export async function POST(req: Request) {
     const { idToken } = (await req.json()) as { idToken: string };
     const decoded = await adminAuth.verifyIdToken(idToken);
 
+    // console.log("DECODE:", decoded);
     const role = (decoded.role ?? "student") as Role;
     const isApproved = Boolean(decoded.isApproved);
 

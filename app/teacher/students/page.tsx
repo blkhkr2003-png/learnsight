@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AuthGuard } from "@/components/auth-guard";
+import AuthGuard from "@/components/auth-guard";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import {

@@ -1,46 +1,41 @@
 "use client";
 
-import type React from "react";
-
-import { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useUser } from "@/contexts/user-context";
 import { Brain } from "lucide-react";
 
 interface AuthGuardProps {
   children: React.ReactNode;
-  requiredRole?: "student" | "teacher" | "parent";
+  requiredRole?: "student" | "teacher" | "parent"; // single role
+  allowedRoles?: string[]; // or multiple roles
 }
 
-export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
-  const [isLoading, setIsLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+export default function AuthGuard({
+  children,
+  requiredRole,
+  allowedRoles,
+}: AuthGuardProps) {
+  const { uid, role, isApproved, loading } = useUser();
   const router = useRouter();
 
+  // Combine requiredRole and allowedRoles into one array for easier checking
+  const rolesToCheck = allowedRoles ?? (requiredRole ? [requiredRole] : []);
+
   useEffect(() => {
-    // TODO: Implement Firebase Auth state listener
-    // const auth = getAuth()
-    // const unsubscribe = onAuthStateChanged(auth, (user) => {
-    //   if (user) {
-    //     // Check user role from custom claims or database
-    //     setIsAuthenticated(true)
-    //   } else {
-    //     router.push('/login')
-    //   }
-    //   setIsLoading(false)
-    // })
+    if (!loading) {
+      if (!uid) {
+        router.push("/login");
+      } else if (rolesToCheck.length && !rolesToCheck.includes(role)) {
+        router.push("/login"); // or an unauthorized page
+      } else if (!isApproved) {
+        router.push("/support"); // pending approval page
+      }
+    }
+  }, [uid, role, isApproved, loading, rolesToCheck, router]);
 
-    // Simulate auth check
-    const checkAuth = async () => {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      // For demo purposes, assume user is authenticated
-      setIsAuthenticated(true);
-      setIsLoading(false);
-    };
-
-    checkAuth();
-  }, [router]);
-
-  if (isLoading) {
+  // Show loading spinner/animation while checking auth
+  if (loading || !uid) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
@@ -51,9 +46,6 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
     );
   }
 
-  if (!isAuthenticated) {
-    return null; // Will redirect to login
-  }
-
+  // If user passes all checks, render children
   return <>{children}</>;
 }

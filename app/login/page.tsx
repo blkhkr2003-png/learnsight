@@ -4,11 +4,7 @@
 import React, { useEffect, useState } from "react";
 import type { UserDoc, Role } from "@/types";
 import { auth, googleProvider, db } from "@/lib/firebase";
-import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signInWithPopup,
-} from "firebase/auth";
+import { signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
