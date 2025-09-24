@@ -28,28 +28,38 @@ export type Fundamental =
   | "retention"
   | "application";
 
-export interface AnswerRecord {
-  questionId: string;
-  correct: boolean;
-  difficulty: number;
-  timestamp: FirebaseFirestore.Timestamp;
+export interface QuestionDoc {
+  id?: string; // doc id
+  text: string;
+  difficulty: number; // 1..5
+  choices?: string[];
+  correctChoice?: number;
   fundamentals?: Partial<Record<Fundamental, number>>;
 }
 
-export interface DiagnosticSession {
+export interface DiagnosticAttempt {
   id?: string;
   userId: string;
   startedAt: FirebaseFirestore.Timestamp;
-  endedAt?: FirebaseFirestore.Timestamp;
-  answers: AnswerRecord[];
+  completedAt?: FirebaseFirestore.Timestamp;
+  answers: {
+    questionId: string;
+    chosenIndex: number;
+    correct: boolean;
+  }[];
   aggregates?: Record<Fundamental, number>;
 }
 
-export interface Question {
+export interface PracticeTask {
   id: string;
-  text: string;
-  choices?: string[];
-  correctChoice?: number;
-  difficulty: number; // 1..5
-  fundamentals?: Partial<Record<Fundamental, number>>;
+  userId: string;
+  fundamental: Fundamental;
+  title: string;
+  description: string;
+  completed: boolean;
 }
+
+// A safe version of QuestionDoc to send to the frontend (no correct answers)
+export type QuestionForClient = Omit<QuestionDoc, "correctChoice"> & {
+  id: string;
+};
