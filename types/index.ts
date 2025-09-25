@@ -30,12 +30,17 @@ export type Fundamental =
 
 export interface QuestionDoc {
   id?: string; // doc id
-  text: string;
+  question: string;
   difficulty: number; // 1..5
   choices?: string[];
   correctChoice?: number;
   fundamentals?: Partial<Record<Fundamental, number>>;
 }
+
+// A safe version of QuestionDoc to send to the frontend (no correct answers)
+export type QuestionForClient = Omit<QuestionDoc, "correctChoice"> & {
+  id: string;
+};
 
 export interface DiagnosticAttempt {
   id?: string;
@@ -58,8 +63,3 @@ export interface PracticeTask {
   description: string;
   completed: boolean;
 }
-
-// A safe version of QuestionDoc to send to the frontend (no correct answers)
-export type QuestionForClient = Omit<QuestionDoc, "correctChoice"> & {
-  id: string;
-};

@@ -1,17 +1,14 @@
 // /utils/adaptive.ts
 
-export type FundamentalKey =
-  | "listening"
-  | "grasping"
-  | "retention"
-  | "application";
+import type { QuestionDoc, Fundamental, QuestionForClient } from "@/types";
+import { adminDb } from "@/lib/firebase-admin";
 
 export interface LearningFundamental {
-  name: "Listening" | "Grasping" | "Retention" | "Application";
+  name: Capitalize<Fundamental>;
   score: number;
   level: "Beginner" | "Intermediate" | "Advanced";
-  weakAreas: string[];
-  recommendations: string[];
+  weakAreas?: string[];
+  recommendations?: string[];
 }
 
 export interface StudentProfile {
@@ -33,11 +30,11 @@ export interface StudentProfile {
 export interface DiagnosticQuestion {
   id: string;
   fundamental: LearningFundamental["name"];
-  difficulty: "easy" | "medium" | "hard";
+  difficulty: number; // numeric 1..5
   question: string;
   options: string[];
-  correctAnswer: number;
-  explanation: string;
+  correctAnswer?: number;
+  explanation?: string;
   timeLimit: number; // seconds
 }
 
@@ -57,23 +54,8 @@ export interface PracticeSession {
  * - difficulty is numeric 1..5 (so DB queries can be numeric).
  * - fundamentals map shows which fundamentals this question touches (weight > 0).
  */
-export interface QuestionDoc {
-  explanation: string;
-  id?: string;
-  question: string;
-  options: string[];
-  correctChoice?: number;
-  difficulty: number; // 1..5
-  fundamentals: Record<FundamentalKey, number>;
-}
-
-//  Client-safe question (no correctChoice)
-export type QuestionForClient = Omit<QuestionDoc, "correctChoice"> & {
-  id: string;
-};
 
 // Map numeric difficulty (1..5) -> label
-
 export function numericToLabelDifficulty(
   n: number
 ): "easy" | "medium" | "hard" {
@@ -104,36 +86,6 @@ export class AdaptiveLearningEngine {
   static calculateStartingDifficultyNumber(studentScore: number) {
     const label = this.calculateDifficulty(studentScore);
     return labelToNumericDifficulty(label);
-  }
-
-  /* Mock / demo practice question generator (client-side fallback / seed).
-   * Replace with real DB or AI generator in production.
-   */
-  static generatePracticeQuestions(
-    profile: StudentProfile,
-    fundamental: LearningFundamental["name"],
-    count = 5
-  ): DiagnosticQuestion[] {
-    const fundamentalData = profile.fundamentals.find(
-      (f) => f.name === fundamental
-    );
-    const difficulty = this.calculateDifficulty(
-      fundamentalData?.score || 0,
-      fundamental
-    );
-
-    return Array.from({ length: count }, (_, i) => ({
-      id: `q_${fundamental.toLowerCase()}_${i + 1}`,
-      fundamental,
-      difficulty,
-      question: `${fundamental} practice question ${
-        i + 1
-      } (${difficulty} level)`,
-      options: ["Option A", "Option B", "Option C", "Option D"],
-      correctAnswer: Math.floor(Math.random() * 4),
-      explanation: `This tests your ${fundamental.toLowerCase()} skills at ${difficulty} level.`,
-      timeLimit: difficulty === "easy" ? 30 : difficulty === "medium" ? 45 : 60,
-    }));
   }
 
   /* Update an in-memory StudentProfile after a practice session.
@@ -171,6 +123,102 @@ export class AdaptiveLearningEngine {
       practiceStreak: profile.practiceStreak + 1,
       lastActive: new Date(),
     };
+  }
+
+  /**
+   * Convert QuestionDoc to client-friendly DiagnosticQuestion
+   */
+  static questionDocToDiagnosticQuestion(q: QuestionDoc): DiagnosticQuestion {
+    const fundamental = AdaptiveLearningEngine.mapFundamentalsToName(
+      q.fundamentals || {}
+    );
+    return {
+      id: q.id || "unknown",
+      fundamental,
+      difficulty: q.difficulty,
+      question: q.question,
+      options: q.choices || [],
+      correctAnswer: q.correctChoice,
+      timeLimit: q.difficulty <= 2 ? 30 : q.difficulty <= 4 ? 45 : 60,
+    };
+  }
+
+  /**
+   * Pick the primary fundamental with the highest weight
+   */
+  static mapFundamentalsToName(
+    map: Partial<Record<Fundamental, number>>
+  ): LearningFundamental["name"] {
+    const entries = Object.entries(map) as [Fundamental, number][];
+    entries.sort((a, b) => b[1] - a[1]);
+    const top = entries[0]?.[0] || "listening";
+    return (top.charAt(0).toUpperCase() +
+      top.slice(1)) as LearningFundamental["name"];
+  }
+
+  /**
+   * Fetch adaptive diagnostic questions from Firestore
+   * Balances fundamentals and difficulty (moved from db-admin.ts)
+   */
+  static async fetchDiagnosticQuestions({
+    count = 6,
+    startingDifficulty = 3,
+    fundamentals,
+  }: {
+    count?: number;
+    startingDifficulty?: number;
+    fundamentals?: Fundamental[];
+  } = {}): Promise<QuestionForClient[]> {
+    const ALL: Fundamental[] = [
+      "listening",
+      "grasping",
+      "retention",
+      "application",
+    ];
+    const fundList = fundamentals?.length ? fundamentals : ALL;
+    const perFund = Math.ceil(count / fundList.length);
+
+    const picks: Map<string, QuestionDoc> = new Map();
+
+    for (const f of fundList) {
+      let found: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+      for (let delta = 0; delta <= 4 && found.length < perFund; delta++) {
+        const ds: number[] = [];
+        const low = startingDifficulty - delta;
+        const high = startingDifficulty + delta;
+        if (low >= 1) ds.push(low);
+        if (high !== low && high <= 5) ds.push(high);
+
+        for (const d of ds) {
+          try {
+            const snap = await adminDb
+              .collection("questions")
+              .where("difficulty", "==", d)
+              .where(`fundamentals.${f}`, ">", 0)
+              .limit(perFund * 5)
+              .get();
+            if (!snap.empty) found = found.concat(snap.docs);
+          } catch (err) {
+            console.warn("Partial fetch error", err);
+          }
+        }
+      }
+
+      const sampled = Array.from(new Set(found.map((d) => d.id)))
+        .map((id) => found.find((doc) => doc.id === id)!)
+        .slice(0, perFund);
+
+      for (const s of sampled) {
+        const q = s.data() as QuestionDoc;
+        q.id = s.id;
+        if (!picks.has(q.id)) picks.set(q.id, q);
+      }
+
+      if (picks.size >= count) break;
+    }
+
+    const out = Array.from(picks.values()).slice(0, count);
+    return out.map((q) => this.questionDocToDiagnosticQuestion(q));
   }
 }
 
@@ -221,54 +269,4 @@ export function selectNextQuestion(
 
   // No candidate found
   return null;
-}
-
-/* -------------------------
-   Small helpers to adapt between DB QuestionDoc and client DiagnosticQuestion
-   ------------------------- */
-
-/**
- * Convert a DB QuestionDoc to a DiagnosticQuestion (client-facing).
- * This strips correctChoice (so you don't expose answers) and maps numeric difficulty -> labeled difficulty.
- */
-export function questionDocToDiagnosticQuestion(
-  q: QuestionDoc
-): DiagnosticQuestion {
-  return {
-    id: q.id || "unknown",
-    fundamental: mapFundamentalsToName(q.fundamentals) || "Listening",
-    difficulty: numericToLabelDifficulty(q.difficulty),
-    question: q.question,
-    options: q.options,
-    correctAnswer: q.correctChoice ?? 0,
-    explanation: q.explanation ?? "",
-    timeLimit:
-      numericToLabelDifficulty(q.difficulty) === "easy"
-        ? 30
-        : numericToLabelDifficulty(q.difficulty) === "medium"
-        ? 45
-        : 60,
-  };
-}
-
-/**
- * A very simple heuristic: pick the fundamental with highest non-zero weight in fundamentals map.
- * Adjust to your schema (if you store a primaryFundamental field in DB, prefer that).
- */
-export function mapFundamentalsToName(
-  map: Record<FundamentalKey, number>
-): LearningFundamental["name"] {
-  const entries = Object.entries(map) as [FundamentalKey, number][];
-  entries.sort((a, b) => b[1] - a[1]); // descending by weight
-  const top = entries[0][0];
-  switch (top) {
-    case "listening":
-      return "Listening";
-    case "grasping":
-      return "Grasping";
-    case "retention":
-      return "Retention";
-    default:
-      return "Application";
-  }
 }
