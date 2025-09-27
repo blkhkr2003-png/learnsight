@@ -45,6 +45,14 @@ export async function POST(req: Request) {
 
       if (attempt.completedAt) throw new Error("ATTEMPT_ALREADY_COMPLETED");
 
+      // Sequence check: submitted question must match lastServedQuestionId
+      if (
+        attempt.lastServedQuestionId &&
+        attempt.lastServedQuestionId !== questionId
+      ) {
+        throw new Error("QUESTION_OUT_OF_SEQUENCE");
+      }
+
       // Index check
       if (chosenIndex < 0 || chosenIndex >= (question.choices?.length ?? 0)) {
         throw new Error("INVALID_CHOSEN_INDEX");
@@ -55,7 +63,6 @@ export async function POST(req: Request) {
         questionId,
         chosenIndex,
         correct,
-        answeredAt: admin.firestore.Timestamp.now(),
         difficulty: question.difficulty ?? null,
         fundamentals: question.fundamentals ?? null,
       };
@@ -85,12 +92,16 @@ export async function POST(req: Request) {
         completedAt = admin.firestore.Timestamp.now();
       }
 
-      tx.update(attemptRef, {
+      // IMPORTANT: clear lastServedQuestionId after consuming it to avoid re-submission
+      const updates: any = {
         answers: prevAnswers,
         score,
         updatedAt: admin.firestore.Timestamp.now(),
-        ...(completedAt ? { completedAt } : {}),
-      });
+        lastServedQuestionId: admin.firestore.FieldValue.delete(), // remove the field
+      };
+      if (completedAt) updates.completedAt = completedAt;
+
+      tx.update(attemptRef, updates);
 
       // (Optional) Audit subcollection
       const auditRef = attemptRef.collection("events").doc();
@@ -99,7 +110,6 @@ export async function POST(req: Request) {
         questionId,
         chosenIndex,
         correct,
-        createdAt: admin.firestore.Timestamp.now(),
       });
 
       return {
@@ -147,6 +157,11 @@ export async function POST(req: Request) {
         return NextResponse.json(
           { error: "Chosen index out of range" },
           { status: 400 }
+        );
+      case "QUESTION_OUT_OF_SEQUENCE":
+        return NextResponse.json(
+          { error: "Submitted question does not match last served question" },
+          { status: 409 }
         );
       default:
         console.error("submit-answer error:", err);

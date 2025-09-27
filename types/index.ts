@@ -54,6 +54,7 @@ export interface DiagnosticAttempt {
   }[];
   expectedQuestionCount?: number; // ✅ add this
   aggregates?: Record<Fundamental, number>;
+  lastServedQuestionId?: string; // ✅ NEW
 }
 
 export interface PracticeTask {

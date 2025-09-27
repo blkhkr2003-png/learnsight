@@ -6,8 +6,10 @@ import type { DiagnosticAttempt } from "@/types";
 
 export async function POST(req: Request) {
   try {
-    const { userId } = (await req.json()) as { userId?: string };
-
+    const { userId, expectedQuestionCount } = (await req.json()) as {
+      userId?: string;
+      expectedQuestionCount?: number;
+    };
     // Validate input
     if (!userId || typeof userId !== "string") {
       return NextResponse.json(
@@ -15,6 +17,10 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
+
+    // Ensure expectedQuestionCount always has a value (default 10)
+    const questionCount =
+      typeof expectedQuestionCount === "number" ? expectedQuestionCount : 10;
 
     // Current timestamp from Firestore
     const now = admin.firestore.Timestamp.now();
@@ -25,6 +31,7 @@ export async function POST(req: Request) {
       startedAt: now,
       completedAt: undefined,
       answers: [], // initially empty for adaptive test
+      expectedQuestionCount: questionCount,
     };
 
     // Save to Firestore

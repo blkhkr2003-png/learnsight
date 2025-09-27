@@ -8,9 +8,11 @@ import {
   questionDocToDiagnosticQuestion,
 } from "@/utils/adaptive";
 import type { QuestionDoc, QuestionForClient } from "@/types";
+import { Timestamp } from "firebase-admin/firestore";
 
 // ✅ Input schema with zod (runtime safe)
 const requestSchema = z.object({
+  attemptId: z.string().min(1), // ✅ require attemptId so we can track last served
   lastDifficulty: z.number().min(1).max(5).optional(),
   answeredCorrectly: z.boolean().optional(),
   excludedIds: z.array(z.string()).default([]),
@@ -21,13 +23,42 @@ export async function POST(req: Request) {
   try {
     // 1) Validate request body
     const body = requestSchema.parse(await req.json());
-    const { lastDifficulty, answeredCorrectly, excludedIds, studentScore } =
-      body;
+    const {
+      attemptId,
+      lastDifficulty,
+      answeredCorrectly,
+      excludedIds,
+      studentScore,
+    } = body;
+
+    // 1.5) Load the attempt so we can check completed state and existing answers
+    const attemptRef = adminDb.collection("diagnosticAttempts").doc(attemptId); // ✅ use attemptId to load attempt
+    const attemptSnap = await attemptRef.get();
+    if (!attemptSnap.exists) {
+      return NextResponse.json({ error: "Attempt not found" }, { status: 404 });
+    }
+    const attempt = attemptSnap.data() as any;
+
+    if (attempt.completedAt) {
+      return NextResponse.json(
+        { error: "Attempt already completed" },
+        { status: 400 }
+      );
+    }
+
+    // If client didn't pass excludedIds, merge with attempt answers to avoid repeats
+    const attemptExcluded = Array.isArray(attempt.answers)
+      ? attempt.answers.map((a: any) => a.questionId)
+      : [];
+    const combinedExcluded = Array.from(
+      new Set([...attemptExcluded, ...(excludedIds || [])])
+    );
 
     // 2) Decide target difficulty
     let targetDifficulty: number;
     let picked: QuestionDoc | null = null;
 
+    // 2.5) If we have a lastDifficulty and answeredCorrectly, we can adapt
     if (
       typeof lastDifficulty === "number" &&
       typeof answeredCorrectly === "boolean"
@@ -64,7 +95,7 @@ export async function POST(req: Request) {
           id: doc.id,
           ...(doc.data() as Omit<QuestionDoc, "id">),
         }))
-        .filter((q) => !excludedIds.includes(q.id));
+        .filter((q) => !combinedExcluded.includes(q.id));
 
       found = found.concat(docs);
     }
@@ -86,7 +117,7 @@ export async function POST(req: Request) {
         found,
         lastDifficulty,
         answeredCorrectly,
-        new Set(excludedIds)
+        new Set(combinedExcluded)
       );
     } else {
       // First question or no history → random from found
@@ -100,7 +131,22 @@ export async function POST(req: Request) {
       );
     }
 
-    // 5) Convert to client-friendly shape
+    // 5) Update attempt to record which question was just served (lastServedQuestionId)
+    // Use a transaction to ensure we don't overwrite if attempt completed between reads
+    await adminDb.runTransaction(async (tx) => {
+      const snap = await tx.get(attemptRef);
+      if (!snap.exists) throw new Error("ATTEMPT_NOT_FOUND");
+      const current = snap.data() as any;
+      if (current.completedAt) throw new Error("ATTEMPT_ALREADY_COMPLETED");
+
+      // set lastServedQuestionId and updatedAt
+      tx.update(attemptRef, {
+        lastServedQuestionId: picked.id,
+        updatedAt: Timestamp.now(),
+      });
+    });
+
+    // Convert to client-friendly shape
     // This removes correctChoice at runtime too:
     const questionDoc = questionDocToDiagnosticQuestion(picked); // already safe
     const questionForClient: QuestionForClient = {
@@ -115,7 +161,8 @@ export async function POST(req: Request) {
           question: questionForClient,
           meta: {
             nextRecommendedDifficulty: targetDifficulty,
-            excludedCount: excludedIds.length,
+            excludedCount: combinedExcluded.length,
+            attemptId,
           },
         },
       },
@@ -123,6 +170,16 @@ export async function POST(req: Request) {
     );
   } catch (err: any) {
     console.error("Next-question API error:", err);
+    // map transaction thrown errors
+    if (err.message === "ATTEMPT_ALREADY_COMPLETED") {
+      return NextResponse.json(
+        { error: "Attempt already completed" },
+        { status: 400 }
+      );
+    }
+    if (err.message === "ATTEMPT_NOT_FOUND") {
+      return NextResponse.json({ error: "Attempt not found" }, { status: 404 });
+    }
     return NextResponse.json(
       { error: err.message || "Server error" },
       { status: 500 }
