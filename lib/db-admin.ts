@@ -119,18 +119,3 @@ export async function getPaperQuestions(paperId: string) {
     questions,
   };
 }
-
-// 🟩 Main Goal of lib/db-admin.ts
-// This file is your server-side database helper for the diagnostic system.
-
-// It does two big jobs:
-// Manage Questions
-// Fetches diagnostic questions from Firestore.
-// Randomizes and balances them by fundamental + difficulty.
-// Cleans answers before sending to the client (no cheating).
-// Manage Diagnostic Attempts
-// Creates new attempt records when a student starts a test.
-// Updates those records when the student finishes (scores, aggregates).
-
-// 📝 In One Sentence
-// lib/db-admin.ts is the backend “data access layer” that talks to Firestore to serve adaptive diagnostic questions and record students’ test attempts.

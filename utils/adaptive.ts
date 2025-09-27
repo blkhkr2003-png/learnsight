@@ -68,7 +68,7 @@ export function numericToLabelDifficulty(
 export function labelToNumericDifficulty(
   label: "easy" | "medium" | "hard"
 ): number {
-  return label === "easy" ? 2 : label === "medium" ? 3 : 4;
+  return label === "easy" ? 2 : label === "medium" ? 3 : 5;
 }
 
 // Adaptive learning algorithm
@@ -270,3 +270,7 @@ export function selectNextQuestion(
   // No candidate found
   return null;
 }
+
+// NEW EXPORT so you can import it directly
+export const questionDocToDiagnosticQuestion =
+  AdaptiveLearningEngine.questionDocToDiagnosticQuestion;
