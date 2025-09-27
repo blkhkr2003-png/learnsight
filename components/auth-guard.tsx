@@ -28,9 +28,10 @@ export default function AuthGuard({
         router.push("/login");
       } else if (rolesToCheck.length && !rolesToCheck.includes(role)) {
         router.push("/login"); // or an unauthorized page
-      } else if (!isApproved) {
-        router.push("/support"); // pending approval page
       }
+      //  else if (!isApproved) {
+      //   router.push("/support"); // pending approval page
+      // }
     }
   }, [uid, role, isApproved, loading, rolesToCheck, router]);
 

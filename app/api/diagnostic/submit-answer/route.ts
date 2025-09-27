@@ -2,12 +2,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import admin, { adminDb } from "@/lib/firebase-admin";
+import { verifyAuthHeader } from "@/lib/auth";
 import type { DiagnosticAttempt, QuestionDoc } from "@/types";
 
 const ATTEMPTS_COL = "diagnosticAttempts";
 const QUESTIONS_COL = "questions";
 
-// Request validation schema
+// Schema validation
 const bodySchema = z.object({
   attemptId: z.string().min(1),
   questionId: z.string().min(1),
@@ -16,11 +17,12 @@ const bodySchema = z.object({
 
 export async function POST(req: Request) {
   try {
-    // 1) validate incoming payload (runtime safe)
+    // 1) Validate + auth
     const json = await req.json();
     const { attemptId, questionId, chosenIndex } = bodySchema.parse(json);
+    const uid = await verifyAuthHeader(req); // current user UID
 
-    // 2) Atomic transaction: fetch attempt + question, then update attempt.answers
+    // 2) Transaction
     const result = await adminDb.runTransaction(async (tx) => {
       const attemptRef = adminDb.collection(ATTEMPTS_COL).doc(attemptId);
       const qRef = adminDb.collection(QUESTIONS_COL).doc(questionId);
@@ -36,84 +38,96 @@ export async function POST(req: Request) {
       const attempt = attemptSnap.data() as DiagnosticAttempt;
       const question = qSnap.data() as QuestionDoc;
 
-      // 3) Basic business validations
-      if (attempt.completedAt) {
-        // Don't accept answers for completed attempts
-        throw new Error("ATTEMPT_ALREADY_COMPLETED");
+      // Ownership check
+      if (attempt.userId !== uid) {
+        throw new Error("UNAUTHORIZED");
       }
 
-      // Validate chosenIndex is within choices bounds (avoid invalid indices)
-      const choicesLen = Array.isArray(question.choices)
-        ? question.choices.length
-        : 0;
-      if (chosenIndex < 0 || chosenIndex >= choicesLen) {
+      if (attempt.completedAt) throw new Error("ATTEMPT_ALREADY_COMPLETED");
+
+      // Index check
+      if (chosenIndex < 0 || chosenIndex >= (question.choices?.length ?? 0)) {
         throw new Error("INVALID_CHOSEN_INDEX");
       }
 
-      const correctChoice = question.correctChoice;
-
-      // Prepare answer record (store small question meta for later analytics)
+      const correct = chosenIndex === question.correctChoice;
       const answerRecord = {
         questionId,
         chosenIndex,
-        correct: chosenIndex === correctChoice,
+        correct,
         answeredAt: admin.firestore.Timestamp.now(),
-        // store snapshot metadata for analytics (optional but helpful)
         difficulty: question.difficulty ?? null,
         fundamentals: question.fundamentals ?? null,
       };
 
-      // Ensure attempt.answers is an array
+      // Ensure answers array
       const prevAnswers = Array.isArray(attempt.answers)
         ? [...attempt.answers]
         : [];
 
-      // If answer for this question already exists, update it; else push new
-      const existingIndex = prevAnswers.findIndex(
-        (a) => a.questionId === questionId
-      );
-      if (existingIndex >= 0) {
-        prevAnswers[existingIndex] = {
-          ...prevAnswers[existingIndex],
-          ...answerRecord,
-        };
+      // Update or insert
+      const idx = prevAnswers.findIndex((a) => a.questionId === questionId);
+      if (idx >= 0) {
+        prevAnswers[idx] = { ...prevAnswers[idx], ...answerRecord };
       } else {
         prevAnswers.push(answerRecord);
       }
 
-      // (Optional) Recompute simple score as percentage of correct answers so far
       const numCorrect = prevAnswers.filter((a) => a.correct).length;
-      const score = prevAnswers.length
-        ? Math.round((numCorrect / prevAnswers.length) * 100)
-        : 0;
+      const score = Math.round((numCorrect / prevAnswers.length) * 100);
 
-      // Write updated attempt back (atomic)
+      // Auto-complete if expectedQuestionCount reached
+      let completedAt: admin.firestore.Timestamp | null = null;
+      if (
+        attempt.expectedQuestionCount &&
+        prevAnswers.length >= attempt.expectedQuestionCount
+      ) {
+        completedAt = admin.firestore.Timestamp.now();
+      }
+
       tx.update(attemptRef, {
         answers: prevAnswers,
-        score, // optional field; add to attempt doc for UI
+        score,
         updatedAt: admin.firestore.Timestamp.now(),
+        ...(completedAt ? { completedAt } : {}),
+      });
+
+      // (Optional) Audit subcollection
+      const auditRef = attemptRef.collection("events").doc();
+      tx.set(auditRef, {
+        type: "ANSWER_SUBMITTED",
+        questionId,
+        chosenIndex,
+        correct,
+        createdAt: admin.firestore.Timestamp.now(),
       });
 
       return {
-        correct: answerRecord.correct,
+        correct,
         score,
         answersCount: prevAnswers.length,
-        answeredAt: answerRecord.answeredAt.toDate().toISOString(),
+        completed: !!completedAt,
       };
     });
 
-    // 4) Return structured success response
     return NextResponse.json({ status: "ok", ...result }, { status: 200 });
   } catch (err: any) {
-    // 5) Friendly error mapping
-    if (err && err.name === "ZodError") {
+    if (err.name === "ZodError") {
       return NextResponse.json(
-        { error: "Invalid request payload", details: err.errors },
+        { error: "Invalid payload", details: err.errors },
         { status: 400 }
       );
     }
 
-    switch (err?.message) {
+    switch (err.message) {
+      case "MISSING_AUTH_HEADER":
+      case "INVALID_AUTH_TOKEN":
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      case "UNAUTHORIZED":
+        return NextResponse.json(
+          { error: "Not your attempt" },
+          { status: 403 }
+        );
       case "ATTEMPT_NOT_FOUND":
         return NextResponse.json(
           { error: "Attempt not found" },
@@ -131,7 +145,7 @@ export async function POST(req: Request) {
         );
       case "INVALID_CHOSEN_INDEX":
         return NextResponse.json(
-          { error: "chosenIndex out of range for that question" },
+          { error: "Chosen index out of range" },
           { status: 400 }
         );
       default:

@@ -138,7 +138,7 @@ export class AdaptiveLearningEngine {
       difficulty: q.difficulty,
       question: q.question,
       options: q.choices || [],
-      correctAnswer: q.correctChoice,
+      // correctAnswer: q.correctChoice,
       timeLimit: q.difficulty <= 2 ? 30 : q.difficulty <= 4 ? 45 : 60,
     };
   }

@@ -101,9 +101,11 @@ export async function POST(req: Request) {
     }
 
     // 5) Convert to client-friendly shape
+    // This removes correctChoice at runtime too:
+    const questionDoc = questionDocToDiagnosticQuestion(picked); // already safe
     const questionForClient: QuestionForClient = {
-      ...questionDocToDiagnosticQuestion(picked),
-      // ✅ do NOT include correctChoice
+      ...questionDoc,
+      id: picked.id!,
     };
 
     // 6) Build structured response

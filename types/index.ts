@@ -52,6 +52,7 @@ export interface DiagnosticAttempt {
     chosenIndex: number;
     correct: boolean;
   }[];
+  expectedQuestionCount?: number; // ✅ add this
   aggregates?: Record<Fundamental, number>;
 }
 

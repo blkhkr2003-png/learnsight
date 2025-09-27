@@ -21,7 +21,7 @@ export async function POST(req: Request) {
 
     // Build a DiagnosticAttempt skeleton (no questions yet)
     const attempt: Omit<DiagnosticAttempt, "id"> = {
-      userId,
+      userId: userId,
       startedAt: now,
       completedAt: undefined,
       answers: [], // initially empty for adaptive test
