@@ -1,66 +1,65 @@
 // app/api/diagnostic/complete/route.ts
 import { NextResponse } from "next/server";
 import { computeScores } from "@/utils/scoring";
-import { AdaptiveLearningEngine } from "@/utils/adaptive";
+import { generatePracticeSessions, PracticeSession } from "@/utils/practice";
 import admin from "@/lib/firebase-admin";
 import type { Fundamental } from "@/types";
 
 const db = admin.firestore();
-const WEAK_THRESHOLD = 50;
-const PRACTICE_QUESTION_COUNT = 3;
-const STARTING_DIFFICULTY = 2;
+const WEAK_THRESHOLD = 70;
+const PRACTICE_QUESTION_COUNT = 5;
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { attemptId, generatePractice = true } = body as {
+    const {
+      attemptId,
+      studentId,
+      generatePractice = true,
+    } = body as {
       attemptId: string;
+      studentId: string;
       generatePractice?: boolean;
     };
 
-    if (!attemptId) {
+    if (!attemptId || !studentId) {
       return NextResponse.json(
-        { error: "attemptId is required" },
+        { error: "attemptId and studentId are required" },
         { status: 400 }
       );
     }
 
-    // 1. Compute scores
+    // 1️⃣ Compute scores
     const scores = await computeScores(attemptId);
 
-    // 2. Optionally generate practice tasks
-    let practiceSessions: any[] = [];
+    // 2️⃣ Determine weak fundamentals
+    const weakFundamentals = Object.entries(scores)
+      .filter(([_, val]) => val < WEAK_THRESHOLD)
+      .map(([f]) => f as Fundamental);
 
-    if (generatePractice) {
-      const weakFundamentals = Object.entries(scores)
-        .filter(([_, val]) => val < WEAK_THRESHOLD)
-        .map(([f]) => f as Fundamental);
-
-      // ✅ Run practice session creation in parallel
-      practiceSessions = await Promise.all(
-        weakFundamentals.map(async (f) => {
-          const qs = await AdaptiveLearningEngine.fetchDiagnosticQuestions({
-            count: PRACTICE_QUESTION_COUNT,
-            fundamentals: [f],
-            startingDifficulty: STARTING_DIFFICULTY,
-          });
-
-          // You may also want to store only question IDs instead of full objects
-          const newDoc = db.collection("practiceSessions").doc();
-          await newDoc.set({
-            attemptId, // link back to attempt
-            fundamental: f,
-            questions: qs, // or qs.map(q=>q.id)
-            startTime: admin.firestore.FieldValue.serverTimestamp(),
-            completed: false,
-          });
-
-          return { id: newDoc.id, fundamental: f, questions: qs };
-        })
+    // 3️⃣ Optionally generate practice sessions
+    let practiceSessions: PracticeSession[] = [];
+    if (generatePractice && weakFundamentals.length > 0) {
+      practiceSessions = await generatePracticeSessions(
+        studentId,
+        weakFundamentals,
+        PRACTICE_QUESTION_COUNT,
+        attemptId
       );
     }
 
-    return NextResponse.json({ scores, practiceSessions }, { status: 200 });
+    // 4️⃣ Update attempt doc
+    await db.collection("diagnosticAttempts").doc(attemptId).update({
+      scores,
+      weakFundamentals,
+      completedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // 5️⃣ Return all to frontend
+    return NextResponse.json(
+      { scores, weakFundamentals, practiceSessions },
+      { status: 200 }
+    );
   } catch (err: any) {
     console.error("diagnostic/complete error", err);
     return NextResponse.json(
