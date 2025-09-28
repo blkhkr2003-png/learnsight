@@ -1,3 +1,4 @@
+// app/student/dashboard/page.tsx
 "use client";
 
 import { Loader } from "@/components/ui/loader"; // 👈 import at top

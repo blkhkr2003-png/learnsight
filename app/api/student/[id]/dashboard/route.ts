@@ -2,7 +2,6 @@
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { PracticeSessionDoc, StudentDashboardData } from "@/types";
-import { Timestamp } from "firebase-admin/firestore";
 
 export async function GET(req: Request, context: any) {
   try {
