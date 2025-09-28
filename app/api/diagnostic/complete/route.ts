@@ -48,12 +48,9 @@ export async function POST(req: Request) {
       );
     }
 
-    // 4️⃣ Update attempt doc
+    // 4️⃣ Update attempt doc with only the fields not updated by computeScores
     await db.collection("diagnosticAttempts").doc(attemptId).update({
-      scores,
-      aggregates: scores,
       weakFundamentals,
-      completedAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 

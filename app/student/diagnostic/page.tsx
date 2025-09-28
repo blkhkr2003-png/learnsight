@@ -118,27 +118,33 @@ export default function DiagnosticTest() {
     excludedIds?: string[];
     studentScore?: number;
   }) => {
-    const res = await fetch(`/api/diagnostic/next-question`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(params),
-    });
-    if (!res.ok) throw new Error("Failed to fetch next question");
-    const data = await res.json();
-    const q = data?.data?.question;
-    if (q) {
-      setCurrentQuestion(q);
-      const defaultTime =
-        q.timeLimit ??
-        (q.difficulty && q.difficulty <= 2
-          ? 30
-          : q.difficulty && q.difficulty <= 4
-          ? 45
-          : 60);
-      setTimeLeft(defaultTime);
-    } else {
-      setCurrentQuestion(null);
-      setTimeLeft(null);
+    try {
+      const res = await fetch(`/api/diagnostic/next-question`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      });
+      if (!res.ok) throw new Error("Failed to fetch next question");
+      const data = await res.json();
+      const q = data?.data?.question;
+      if (q) {
+        setCurrentQuestion(q);
+        const defaultTime =
+          q.timeLimit ??
+          (q.difficulty && q.difficulty <= 2
+            ? 30
+            : q.difficulty && q.difficulty <= 4
+            ? 45
+            : 60);
+        setTimeLeft(defaultTime);
+      } else {
+        setCurrentQuestion(null);
+        setTimeLeft(null);
+      }
+    } catch (error) {
+      console.error("Error fetching question:", error);
+      toast.error("Failed to load the next question. Please try again.");
+      throw error; // Re-throw to allow caller to handle
     }
   };
 
@@ -183,6 +189,19 @@ export default function DiagnosticTest() {
 
       const chosenIndex = timeout ? -1 : selectedAnswer ?? -1;
 
+      // Verify we have a valid question ID before submitting
+      if (!currentQuestion.id) {
+        console.error("No question ID available for submission");
+        toast.error("Question data is incomplete. Please try again.");
+        return;
+      }
+
+      // Disable the submit button to prevent multiple submissions
+      const submitButton1 = document.querySelector(
+        'button[onClick*="handleNextQuestion"]'
+      ) as HTMLButtonElement;
+      if (submitButton1) submitButton1.disabled = true;
+
       const res = await fetch(`/api/diagnostic/submit-answer`, {
         method: "POST",
         headers,
@@ -192,13 +211,89 @@ export default function DiagnosticTest() {
           chosenIndex,
         }),
       });
-      
+
       if (!res.ok) {
         const errorText = await res.text();
         console.error("API Error Response:", errorText);
-        throw new Error(`Failed to submit answer: ${res.status} ${res.statusText}`);
+
+        // Handle the specific error about attempt already completed
+        if (errorText.includes("Attempt already completed")) {
+          toast.error(
+            "This diagnostic test has already been completed. Redirecting to results..."
+          );
+          setTestCompleted(true);
+          return;
+        }
+
+        // Handle the specific error about question mismatch
+        if (
+          errorText.includes(
+            "Submitted question does not match last served question"
+          )
+        ) {
+          toast.error(
+            "There was a synchronization issue. Loading a new question..."
+          );
+          // Reset and fetch a new question
+          setSelectedAnswer(null);
+          try {
+            // First, let's get the current attempt to see what the last served question is
+            const attemptRes = await fetch(
+              `/api/diagnostic/get-attempt?attemptId=${attemptId}`,
+              {
+                method: "GET",
+                headers,
+              }
+            );
+
+            if (attemptRes.ok) {
+              const attemptData = await attemptRes.json();
+              const lastServedQuestionId =
+                attemptData.attempt?.lastServedQuestionId;
+
+              // If there's a last served question ID, let's fetch that specific question
+              if (lastServedQuestionId) {
+                const questionRes = await fetch(
+                  `/api/questions/${lastServedQuestionId}`,
+                  {
+                    method: "GET",
+                    headers,
+                  }
+                );
+
+                if (questionRes.ok) {
+                  const questionData = await questionRes.json();
+                  setCurrentQuestion(questionData);
+                  const defaultTime =
+                    questionData.timeLimit ??
+                    (questionData.difficulty && questionData.difficulty <= 2
+                      ? 30
+                      : questionData.difficulty && questionData.difficulty <= 4
+                      ? 45
+                      : 60);
+                  setTimeLeft(defaultTime);
+                  return;
+                }
+              }
+            }
+
+            // If we can't get the specific question, fetch a new one
+            await fetchQuestion({ attemptId });
+          } catch (fetchError) {
+            const error = fetchError as Error;
+            console.error("Error fetching new question after mismatch:", error);
+            toast.error(
+              "Unable to continue the test. Please refresh the page."
+            );
+          }
+          return;
+        }
+
+        throw new Error(
+          `Failed to submit answer: ${res.status} ${res.statusText}`
+        );
       }
-      
+
       const json = await res.json();
 
       const answersCount: number = json.answersCount ?? 0;
@@ -217,6 +312,12 @@ export default function DiagnosticTest() {
 
       setSelectedAnswer(null);
 
+      // Re-enable the submit button before fetching the next question
+      const submitButton2 = document.querySelector(
+        'button[onClick*="handleNextQuestion"]'
+      ) as HTMLButtonElement;
+      if (submitButton2) submitButton2.disabled = false;
+
       await fetchQuestion({
         attemptId,
         lastDifficulty,
@@ -224,7 +325,21 @@ export default function DiagnosticTest() {
       });
     } catch (err) {
       console.error("Error submitting answer:", err);
-      toast.error(err instanceof Error ? err.message : "Could not submit answer.");
+
+      // Re-enable the submit button if it exists
+      const submitButton3 = document.querySelector(
+        'button[onClick*="handleNextQuestion"]'
+      ) as HTMLButtonElement;
+      if (submitButton3) submitButton3.disabled = false;
+
+      // Only show toast if we haven't already handled the error above
+      const error = err as Error;
+      if (
+        !error.message?.includes("already been completed") &&
+        !error.message?.includes("synchronization issue")
+      ) {
+        toast.error(error.message || "Could not submit answer.");
+      }
     }
   };
 

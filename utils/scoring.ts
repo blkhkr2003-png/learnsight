@@ -1,5 +1,5 @@
 // utils/scoring.ts
-import admin from "@/lib/firebase-admin";
+import admin, { adminDb } from "@/lib/firebase-admin";
 import { AdaptiveLearningEngine } from "@/utils/adaptive";
 import type { Fundamental, DiagnosticAttempt, QuestionDoc } from "@/types";
 
@@ -11,8 +11,7 @@ const FUNDAMENTALS: Fundamental[] = [
 ];
 
 export async function computeScores(attemptId: string) {
-  const db = admin.firestore();
-  const attemptRef = db.collection("diagnosticAttempts").doc(attemptId);
+  const attemptRef = adminDb.collection("diagnosticAttempts").doc(attemptId);
   const attemptSnap = await attemptRef.get();
 
   if (!attemptSnap.exists) throw new Error("Attempt not found");
@@ -21,7 +20,7 @@ export async function computeScores(attemptId: string) {
   const questionIds = attempt.answers.map((a) => a.questionId);
 
   // ✅ Batch-fetch all questions
-  const questionSnaps = await db
+  const questionSnaps = await adminDb
     .collection("questions")
     .where(admin.firestore.FieldPath.documentId(), "in", questionIds)
     .get();
