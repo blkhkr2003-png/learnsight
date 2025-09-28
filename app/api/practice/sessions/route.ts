@@ -6,7 +6,9 @@ import { verifyAuthHeader } from "@/lib/auth";
 // Returns all practice sessions for the authenticated student (current user)
 export async function GET(req: Request) {
   try {
+    console.log("Practice sessions API called");
     const uid = await verifyAuthHeader(req);
+    console.log("User authenticated with UID:", uid);
 
     // Get attemptId from query parameters if provided
     const url = new URL(req.url);
@@ -63,9 +65,13 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ sessions });
   } catch (err: any) {
+    console.error("Error in practice sessions API:", err);
     switch (err?.message) {
       case "MISSING_AUTH_HEADER":
+        console.error("Missing auth header in request");
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       case "INVALID_AUTH_TOKEN":
+        console.error("Invalid auth token in request");
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       default:
         console.error("GET /api/practice/sessions error", err);

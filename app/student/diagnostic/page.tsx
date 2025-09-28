@@ -27,6 +27,7 @@ import {
   Clock,
 } from "lucide-react";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 
 const sidebarItems = [
   {
@@ -65,6 +66,7 @@ interface DiagnosticQuestion {
 export default function DiagnosticTest() {
   const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string>("");
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [currentQuestion, setCurrentQuestion] =
     useState<DiagnosticQuestion | null>(null);
@@ -86,6 +88,8 @@ export default function DiagnosticTest() {
         return;
       }
       setUserId(user.uid);
+      // Set the user name for display
+      setUserName(user.displayName || user.email || "Student");
     });
     return () => unsubscribe();
   }, [router]);
@@ -124,7 +128,13 @@ export default function DiagnosticTest() {
     const q = data?.data?.question;
     if (q) {
       setCurrentQuestion(q);
-      const defaultTime = q.timeLimit ?? (q.difficulty && q.difficulty <= 2 ? 30 : q.difficulty && q.difficulty <= 4 ? 45 : 60);
+      const defaultTime =
+        q.timeLimit ??
+        (q.difficulty && q.difficulty <= 2
+          ? 30
+          : q.difficulty && q.difficulty <= 4
+          ? 45
+          : 60);
       setTimeLeft(defaultTime);
     } else {
       setCurrentQuestion(null);
@@ -171,7 +181,7 @@ export default function DiagnosticTest() {
       };
       if (token) headers["authorization"] = `Bearer ${token}`;
 
-      const chosenIndex = timeout ? -1 : (selectedAnswer ?? -1);
+      const chosenIndex = timeout ? -1 : selectedAnswer ?? -1;
 
       const res = await fetch(`/api/diagnostic/submit-answer`, {
         method: "POST",
@@ -182,7 +192,13 @@ export default function DiagnosticTest() {
           chosenIndex,
         }),
       });
-      if (!res.ok) throw new Error("Failed to submit answer");
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error("API Error Response:", errorText);
+        throw new Error(`Failed to submit answer: ${res.status} ${res.statusText}`);
+      }
+      
       const json = await res.json();
 
       const answersCount: number = json.answersCount ?? 0;
@@ -207,8 +223,8 @@ export default function DiagnosticTest() {
         answeredCorrectly,
       });
     } catch (err) {
-      console.error(err);
-      toast.error("Could not submit answer.");
+      console.error("Error submitting answer:", err);
+      toast.error(err instanceof Error ? err.message : "Could not submit answer.");
     }
   };
 
@@ -240,7 +256,7 @@ export default function DiagnosticTest() {
         <DashboardLayout
           sidebarItems={sidebarItems}
           userRole="student"
-          userName=""
+          userName={userName}
         >
           <div className="max-w-4xl mx-auto space-y-8">
             <div>
@@ -282,7 +298,7 @@ export default function DiagnosticTest() {
         <DashboardLayout
           sidebarItems={sidebarItems}
           userRole="student"
-          userName=""
+          userName={userName}
         >
           <div className="max-w-2xl mx-auto space-y-8">
             <Card className="border-border bg-card text-center">
@@ -415,7 +431,7 @@ export default function DiagnosticTest() {
                     disabled={selectedAnswer === null}
                     size="lg"
                   >
-                    {">"} Next Question
+                    Next Question
                     <ArrowRight className="h-4 w-4 ml-2" />
                   </Button>
                 </div>

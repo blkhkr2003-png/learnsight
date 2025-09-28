@@ -130,22 +130,31 @@ export default function PracticePage() {
     try {
       const user = auth.currentUser;
       const token = await user?.getIdToken();
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
 
       // Build URL with attemptId if provided
-      let url = "/api/practice/sessions";
+      let url = `/api/practice/sessions?userId=${user.uid}`;
       if (attemptId) {
-        url += `?attemptId=${attemptId}`;
+        url += `&attemptId=${attemptId}`;
       }
 
       const res = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      if (!res.ok) throw new Error("Failed to load sessions");
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error("API Error Response:", errorText);
+        throw new Error(`Failed to load sessions: ${res.status} ${res.statusText}`);
+      }
+      
       const data = await res.json();
       let arr: any[] = Array.isArray(data.sessions) ? data.sessions : [];
 
       // If no sessions exist, generate a starter set
-      if (withGenerate && arr.length === 0 && user?.uid) {
+      if (withGenerate && arr.length === 0) {
         const genRes = await fetch("/api/practice/generate", {
           method: "POST",
           headers: {
@@ -181,22 +190,22 @@ export default function PracticePage() {
       setSessions(mapped);
 
       // Fetch last diagnostic scores for per-fundamental logic
-      if (user?.uid) {
-        const dashRes = await fetch(`/api/student/${user.uid}/dashboard`);
-        if (dashRes.ok) {
-          const dash = await dashRes.json();
-          const f = dash?.fundamentals ?? {
-            listening: 0,
-            grasping: 0,
-            retention: 0,
-            application: 0,
-          };
-          setFundamentals(f as FundamentalsScores);
-        }
+      const dashRes = await fetch(`/api/student/${user.uid}/dashboard`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (dashRes.ok) {
+        const dash = await dashRes.json();
+        const f = dash?.fundamentals ?? {
+          listening: 0,
+          grasping: 0,
+          retention: 0,
+          application: 0,
+        };
+        setFundamentals(f as FundamentalsScores);
       }
     } catch (e: any) {
-      console.error(e);
-      setError(e?.message || "Unable to load practice");
+      console.error("Error loading practice sessions:", e);
+      setError(e?.message || "Unable to load practice sessions");
     } finally {
       setLoading(false);
     }
@@ -250,12 +259,14 @@ export default function PracticePage() {
   }, [userLoading, uid]);
 
   const stats = useMemo(() => {
-    const recommended = sessions.filter((s) => s.recommended).length;
+    const recommended = sessions.filter(
+      (s: PracticeListItem) => s.recommended
+    ).length;
     const inProgress = sessions.filter(
-      (s) => s.progress > 0 && s.progress < 100
+      (s: PracticeListItem) => s.progress > 0 && s.progress < 100
     ).length;
     const completed = sessions.filter(
-      (s) => s.completed || s.progress === 100
+      (s: PracticeListItem) => s.completed || s.progress === 100
     ).length;
     return { recommended, inProgress, completed };
   }, [sessions]);
@@ -268,7 +279,7 @@ export default function PracticePage() {
   const ensureAndOpen = async (fundamental: PracticeListItem["type"]) => {
     try {
       const existing = sessions.find(
-        (s) => s.type === fundamental && s.progress < 100
+        (s: PracticeListItem) => s.type === fundamental && s.progress < 100
       );
       if (existing) {
         return handleOpenSession(existing.id);
@@ -318,7 +329,9 @@ export default function PracticePage() {
         await fetchSessions(false);
         if (created?.id) return handleOpenSession(created.id);
         // Fallback: try find newly fetched
-        const fresh = sessions.find((s) => s.type === fundamental);
+        const fresh = sessions.find(
+          (s: PracticeListItem) => s.type === fundamental
+        );
         if (fresh) return handleOpenSession(fresh.id);
       }
     } catch (e) {
@@ -332,7 +345,9 @@ export default function PracticePage() {
       <DashboardLayout
         sidebarItems={sidebarItems}
         userRole="student"
-        userName={auth.currentUser?.displayName || "Student"}
+        userName={
+          auth.currentUser?.displayName || auth.currentUser?.email || "Student"
+        }
       >
         <div className="space-y-8">
           {/* Header */}
@@ -410,12 +425,15 @@ export default function PracticePage() {
               {(
                 ["listening", "grasping", "retention", "application"] as const
               ).map((f) => {
-                const list = sessions.filter((s) => s.type === f);
+                const list = sessions.filter(
+                  (s: PracticeListItem) => s.type === f
+                );
                 const active =
-                  list.find((s) => s.progress > 0 && s.progress < 100) ||
-                  list[0];
+                  list.find(
+                    (s: PracticeListItem) => s.progress > 0 && s.progress < 100
+                  ) || list[0];
                 const completed = list.find(
-                  (s) => s.progress === 100 || s.completed
+                  (s: PracticeListItem) => s.progress === 100 || s.completed
                 );
                 const score = fundamentals?.[f] ?? 0;
                 const progress = active?.progress ?? (completed ? 100 : 0);
