@@ -1,11 +1,16 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+
 import AuthGuard from "@/components/auth-guard";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { auth } from "@/lib/firebase";
+
 import {
   BarChart3,
   BookOpen,
@@ -45,51 +50,17 @@ const sidebarItems = [
   },
 ];
 
-// Mock practice data
-const practiceQueue = [
-  {
-    id: 1,
-    title: "Listening Comprehension - Science Topics",
-    type: "listening",
-    difficulty: "Medium",
-    estimatedTime: "10 min",
-    progress: 0,
-    recommended: true,
-    description:
-      "Improve your listening skills with science-focused audio content",
-  },
-  {
-    id: 2,
-    title: "Memory Retention - Historical Facts",
-    type: "retention",
-    difficulty: "Hard",
-    estimatedTime: "15 min",
-    progress: 60,
-    recommended: true,
-    description:
-      "Strengthen your memory with historical information recall exercises",
-  },
-  {
-    id: 3,
-    title: "Reading Comprehension - Literature",
-    type: "grasping",
-    difficulty: "Easy",
-    estimatedTime: "12 min",
-    progress: 100,
-    recommended: false,
-    description: "Enhance comprehension skills through literary passages",
-  },
-  {
-    id: 4,
-    title: "Problem Solving - Math Applications",
-    type: "application",
-    difficulty: "Medium",
-    estimatedTime: "20 min",
-    progress: 25,
-    recommended: true,
-    description: "Apply mathematical concepts to real-world scenarios",
-  },
-];
+// Data shape for the UI cards
+type PracticeListItem = {
+  id: string;
+  title: string | null;
+  description: string | null;
+  type: "listening" | "grasping" | "retention" | "application";
+  estimatedTime: number; // minutes
+  progress: number; // 0..100
+  recommended: boolean;
+  completed: boolean;
+};
 
 const getTypeIcon = (type: string) => {
   switch (type) {
@@ -135,6 +106,80 @@ const getDifficultyColor = (difficulty: string) => {
 };
 
 export default function PracticePage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<PracticeListItem[]>([]);
+
+  async function fetchSessions(withGenerate = false) {
+    setLoading(true);
+    setError(null);
+    try {
+      const user = auth.currentUser;
+      const token = await user?.getIdToken();
+      const res = await fetch("/api/practice/sessions", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("Failed to load sessions");
+      const data = await res.json();
+      let arr: any[] = Array.isArray(data.sessions) ? data.sessions : [];
+
+      // If no sessions exist, generate a starter set
+      if (withGenerate && arr.length === 0 && user?.uid) {
+        const genRes = await fetch("/api/practice/generate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            studentId: user.uid,
+            fundamentals: ["listening", "grasping", "retention", "application"],
+            count: 5,
+          }),
+        });
+        if (genRes.ok) {
+          const gen = await genRes.json();
+          arr = gen.practiceSessions || [];
+        }
+      }
+
+      const mapped: PracticeListItem[] = arr.map((s: any) => ({
+        id: s.id,
+        title: s.title || null,
+        description: s.description || null,
+        type: (s.type || s.fundamental || "listening") as PracticeListItem["type"],
+        estimatedTime: typeof s.estimatedTime === "number" ? s.estimatedTime : 10,
+        progress: typeof s.progress === "number" ? s.progress : 0,
+        recommended: !!s.recommended,
+        completed: !!s.completed,
+      }));
+
+      setSessions(mapped);
+    } catch (e: any) {
+      console.error(e);
+      setError(e?.message || "Unable to load practice");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchSessions(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const stats = useMemo(() => {
+    const recommended = sessions.filter((s) => s.recommended).length;
+    const inProgress = sessions.filter((s) => s.progress > 0 && s.progress < 100).length;
+    const completed = sessions.filter((s) => s.completed || s.progress === 100).length;
+    return { recommended, inProgress, completed };
+  }, [sessions]);
+
+  const handleOpenSession = (id: string) => {
+    router.push(`/student/practice/${id}`);
+  };
+
   return (
     <AuthGuard requiredRole="student">
       <DashboardLayout
@@ -163,7 +208,7 @@ export default function PracticePage() {
                     <p className="text-sm font-medium text-muted-foreground">
                       Recommended
                     </p>
-                    <p className="text-2xl font-bold text-card-foreground">3</p>
+                    <p className="text-2xl font-bold text-card-foreground">{stats.recommended}</p>
                   </div>
                   <Star className="h-8 w-8 text-primary" />
                 </div>
@@ -177,7 +222,7 @@ export default function PracticePage() {
                     <p className="text-sm font-medium text-muted-foreground">
                       In Progress
                     </p>
-                    <p className="text-2xl font-bold text-card-foreground">2</p>
+                    <p className="text-2xl font-bold text-card-foreground">{stats.inProgress}</p>
                   </div>
                   <Clock className="h-8 w-8 text-secondary" />
                 </div>
@@ -191,7 +236,7 @@ export default function PracticePage() {
                     <p className="text-sm font-medium text-muted-foreground">
                       Completed
                     </p>
-                    <p className="text-2xl font-bold text-card-foreground">1</p>
+                    <p className="text-2xl font-bold text-card-foreground">{stats.completed}</p>
                   </div>
                   <CheckCircle className="h-8 w-8 text-accent" />
                 </div>
@@ -205,8 +250,15 @@ export default function PracticePage() {
               Your Practice Exercises
             </h2>
 
+            {error && (
+              <div className="text-sm text-red-600">{error}</div>
+            )}
+            {loading && (
+              <div className="text-sm text-muted-foreground">Loading practice sessions...</div>
+            )}
+
             <div className="grid gap-6">
-              {practiceQueue.map((practice) => (
+              {sessions.map((practice) => (
                 <Card key={practice.id} className="border-border bg-card">
                   <CardContent className="p-6">
                     <div className="flex items-start justify-between">
@@ -221,10 +273,10 @@ export default function PracticePage() {
                           </div>
                           <div>
                             <h3 className="font-semibold text-card-foreground">
-                              {practice.title}
+                              {practice.title || "Practice Session"}
                             </h3>
                             <p className="text-sm text-muted-foreground">
-                              {practice.description}
+                              {practice.description || "Adaptive practice session"}
                             </p>
                           </div>
                           {practice.recommended && (
@@ -236,14 +288,12 @@ export default function PracticePage() {
                         </div>
 
                         <div className="flex items-center gap-4 mb-4">
-                          <Badge
-                            className={getDifficultyColor(practice.difficulty)}
-                          >
-                            {practice.difficulty}
+                          <Badge className={getDifficultyColor("Medium")}>
+                            Medium
                           </Badge>
                           <span className="text-sm text-muted-foreground flex items-center gap-1">
                             <Clock className="h-3 w-3" />
-                            {practice.estimatedTime}
+                            {practice.estimatedTime} min
                           </span>
                           <span className="text-sm text-muted-foreground capitalize">
                             {practice.type} skills
@@ -270,17 +320,17 @@ export default function PracticePage() {
 
                       <div className="ml-6 flex flex-col gap-2">
                         {practice.progress === 100 ? (
-                          <Button variant="outline" size="sm">
+                          <Button variant="outline" size="sm" onClick={() => handleOpenSession(practice.id)}>
                             <Repeat className="h-4 w-4 mr-2" />
                             Retry
                           </Button>
                         ) : practice.progress > 0 ? (
-                          <Button size="sm">
+                          <Button size="sm" onClick={() => handleOpenSession(practice.id)}>
                             <Play className="h-4 w-4 mr-2" />
                             Continue
                           </Button>
                         ) : (
-                          <Button size="sm">
+                          <Button size="sm" onClick={() => handleOpenSession(practice.id)}>
                             <Play className="h-4 w-4 mr-2" />
                             Start
                           </Button>
