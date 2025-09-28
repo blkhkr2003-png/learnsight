@@ -80,9 +80,25 @@ export default function LoginPage() {
         return;
       }
 
+      // Update user's last login time
+      try {
+        const userRef = doc(db, "users", userCredential.user.uid);
+        await setDoc(
+          userRef,
+          {
+            lastLogin: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      } catch (firestoreErr) {
+        console.error("Error updating last login time:", firestoreErr);
+        // Non-critical error, continue with login
+      }
+
       router.push(`/${data.role}/dashboard`);
     } catch (err: any) {
-      alert(err.message);
+      console.error("Login error:", err);
+      alert(err.message || "Login failed. Please check your credentials.");
     } finally {
       setIsLoading(false);
     }
@@ -93,20 +109,36 @@ export default function LoginPage() {
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
+      const idToken = await user.getIdToken();
 
+      // Verify the token with the backend
+      const res = await fetch("/api/auth/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
+
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      // If not approved, we can show a message or route to a waiting page
+      if (!data.isApproved) {
+        alert("Your account is waiting for admin approval.");
+        setIsLoading(false);
+        return;
+      }
+
+      // Update user document in Firestore
       const userRef = doc(db, "users", user.uid);
       const userDoc = await getDoc(userRef);
 
       if (!userDoc.exists()) {
-        const userRole = "student"; // Google signup only allows student for now
-        const isApproved = userRole === "student"; // true only for student
-
         const userData: Partial<UserDoc> = {
           uid: user.uid,
           name: user.displayName ?? "",
           email: user.email ?? "",
-          role: userRole,
-          isApproved,
+          role: data.role,
+          isApproved: data.isApproved,
           createdAt: serverTimestamp(),
           lastLogin: serverTimestamp(),
         };
@@ -117,19 +149,16 @@ export default function LoginPage() {
           userRef,
           {
             lastLogin: serverTimestamp(),
-            isApproved:
-              userDoc.data()?.isApproved ?? userDoc.data()?.role === "student",
           },
           { merge: true }
         );
       }
 
-      router.push("/student/dashboard");
+      router.push(`/${data.role}/dashboard`);
     } catch (error: any) {
       console.error("Google login failed:", errorMessage(error));
       alert("Google login failed: " + errorMessage(error));
     } finally {
-      ``;
       setIsLoading(false);
     }
   };
@@ -163,9 +192,21 @@ export default function LoginPage() {
         alert(
           "Your registration was successful! Admin approval is required to activate your profile."
         );
+        // Don't redirect if not approved
+        setIsLoading(false);
+        return;
       }
+
+      // If approved, sign in the user
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        signupEmail,
+        signupPassword
+      );
+
       router.push(`/${role}/dashboard`);
     } catch (err: any) {
+      console.error("Signup error:", err);
       alert("Signup failed: " + errorMessage(err));
     } finally {
       setIsLoading(false);

@@ -90,6 +90,7 @@ export interface StudentDashboardData {
   overallProgress?: number; // e.g., percentage 0-100
   practiceStreak?: number; // consecutive days
   recommendations?: string[]; // list of recommendations
+  lastAttemptId?: string; // latest diagnostic attempt id
 }
 
 export interface PracticeSessionDoc {

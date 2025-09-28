@@ -7,9 +7,25 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle, Loader2 } from "lucide-react";
+import { useUser } from "@/contexts/user-context";
+import { Loader } from "@/components/ui/loader";
 import AuthGuard from "@/components/auth-guard";
 import { DashboardLayout } from "@/components/dashboard-layout";
+
+import {
+  BarChart3,
+  BookOpen,
+  FileText,
+  Target,
+  Play,
+  CheckCircle,
+  Clock,
+  Star,
+  Headphones,
+  Brain,
+  Repeat,
+  Zap,
+} from "lucide-react";
 
 interface Question {
   id: string;
@@ -20,10 +36,35 @@ interface Question {
   timeLimit: number;
 }
 
+const sidebarItems = [
+  {
+    href: "/student/dashboard",
+    label: "Dashboard",
+    icon: <BarChart3 className="h-4 w-4" />,
+  },
+  {
+    href: "/student/diagnostic",
+    label: "Diagnostic Test",
+    icon: <Target className="h-4 w-4" />,
+  },
+  {
+    href: "/student/practice",
+    label: "Practice",
+    icon: <BookOpen className="h-4 w-4" />,
+    active: true,
+  },
+  {
+    href: "/student/reports",
+    label: "Reports",
+    icon: <FileText className="h-4 w-4" />,
+  },
+];
+
 export default function PracticeRunnerPage() {
   const params = useParams();
   const router = useRouter();
   const sessionId = params?.id as string;
+  const { uid, loading: userLoading } = useUser();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -52,7 +93,8 @@ export default function PracticeRunnerPage() {
         setQuestions(Array.isArray(data.questions) ? data.questions : []);
         const a: Record<string, number> = {};
         (Array.isArray(data.answers) ? data.answers : []).forEach((x: any) => {
-          if (typeof x.chosenIndex === "number") a[x.questionId] = x.chosenIndex;
+          if (typeof x.chosenIndex === "number")
+            a[x.questionId] = x.chosenIndex;
         });
         setAnswers(a);
         setCompleted(!!data.completed);
@@ -63,8 +105,8 @@ export default function PracticeRunnerPage() {
         setLoading(false);
       }
     }
-    if (sessionId) load();
-  }, [sessionId]);
+    if (!userLoading && uid && sessionId) load();
+  }, [userLoading, uid, sessionId]);
 
   const progress = useMemo(() => {
     const total = questions.length || 1;
@@ -80,7 +122,11 @@ export default function PracticeRunnerPage() {
 
   const current = questions[currentIndex];
 
-  async function saveAnswer(questionId: string, chosenIndex: number, finish = false) {
+  async function saveAnswer(
+    questionId: string,
+    chosenIndex: number,
+    finish = false
+  ) {
     try {
       setSaving(true);
       const token = await auth.currentUser?.getIdToken();
@@ -113,12 +159,8 @@ export default function PracticeRunnerPage() {
     saveAnswer(current.id, i, last);
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20 text-muted-foreground">
-        <Loader2 className="h-5 w-5 mr-2 animate-spin" /> Loading session...
-      </div>
-    );
+  if (userLoading || loading) {
+    return <Loader />;
   }
 
   if (error) {
@@ -127,7 +169,11 @@ export default function PracticeRunnerPage() {
 
   return (
     <AuthGuard requiredRole="student">
-      <DashboardLayout sidebarItems={[]} userRole="student" userName="Student">
+      <DashboardLayout
+        sidebarItems={sidebarItems}
+        userRole="student"
+        userName=""
+      >
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
@@ -147,12 +193,18 @@ export default function PracticeRunnerPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <CheckCircle className="h-5 w-5 text-green-600" /> Session completed
+                  <CheckCircle className="h-5 w-5 text-green-600" /> Session
+                  completed
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center gap-4">
-                  <Button variant="secondary" onClick={() => router.push("/student/practice")}>Back to Practice</Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => router.push("/student/practice")}
+                  >
+                    Back to Practice
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -160,8 +212,12 @@ export default function PracticeRunnerPage() {
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>Question {currentIndex + 1} of {questions.length}</CardTitle>
-                  <Badge variant="secondary" className="capitalize">{fundamental}</Badge>
+                  <CardTitle>
+                    Question {currentIndex + 1} of {questions.length}
+                  </CardTitle>
+                  <Badge variant="secondary" className="capitalize">
+                    {fundamental}
+                  </Badge>
                 </div>
               </CardHeader>
               <CardContent>
@@ -173,7 +229,9 @@ export default function PracticeRunnerPage() {
                     {current.options.map((opt, i) => (
                       <Button
                         key={i}
-                        variant={answers[current.id] === i ? "default" : "outline"}
+                        variant={
+                          answers[current.id] === i ? "default" : "outline"
+                        }
                         className="justify-start"
                         disabled={saving}
                         onClick={() => handleChoose(i)}
@@ -186,7 +244,9 @@ export default function PracticeRunnerPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="text-sm text-muted-foreground">No questions found.</div>
+            <div className="text-sm text-muted-foreground">
+              No questions found.
+            </div>
           )}
         </div>
       </DashboardLayout>

@@ -1,3 +1,5 @@
+"use client";
+
 // components/ui/loader.tsx
 import { BarChart3 } from "lucide-react"; // or any icon you like
 

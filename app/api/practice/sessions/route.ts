@@ -8,12 +8,22 @@ export async function GET(req: Request) {
   try {
     const uid = await verifyAuthHeader(req);
 
-    // Fetch all sessions for this student
-    const snap = await adminDb
+    // Get attemptId from query parameters if provided
+    const url = new URL(req.url);
+    const attemptId = url.searchParams.get("attemptId");
+
+    // Build query
+    let query = adminDb
       .collection("practiceSessions")
-      .where("studentId", "==", uid)
-      .orderBy("startTime", "desc")
-      .get();
+      .where("studentId", "==", uid);
+
+    // If attemptId is provided, filter by it
+    if (attemptId) {
+      query = query.where("attemptId", "==", attemptId);
+    }
+
+    // Execute query with ordering
+    const snap = await query.orderBy("startTime", "desc").get();
 
     const sessions = snap.docs.map((d) => {
       const data = d.data() || {};

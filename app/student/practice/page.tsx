@@ -10,6 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { auth } from "@/lib/firebase";
+import { useUser } from "@/contexts/user-context";
+import { Loader } from "@/components/ui/loader";
 
 import {
   BarChart3,
@@ -62,6 +64,13 @@ type PracticeListItem = {
   completed: boolean;
 };
 
+type FundamentalsScores = {
+  listening: number;
+  grasping: number;
+  retention: number;
+  application: number;
+};
+
 const getTypeIcon = (type: string) => {
   switch (type) {
     case "listening":
@@ -107,17 +116,28 @@ const getDifficultyColor = (difficulty: string) => {
 
 export default function PracticePage() {
   const router = useRouter();
+  const { uid, loading: userLoading } = useUser();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sessions, setSessions] = useState<PracticeListItem[]>([]);
+  const [fundamentals, setFundamentals] = useState<FundamentalsScores | null>(
+    null
+  );
 
-  async function fetchSessions(withGenerate = false) {
+  async function fetchSessions(withGenerate = false, attemptId?: string) {
     setLoading(true);
     setError(null);
     try {
       const user = auth.currentUser;
       const token = await user?.getIdToken();
-      const res = await fetch("/api/practice/sessions", {
+
+      // Build URL with attemptId if provided
+      let url = "/api/practice/sessions";
+      if (attemptId) {
+        url += `?attemptId=${attemptId}`;
+      }
+
+      const res = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) throw new Error("Failed to load sessions");
@@ -148,14 +168,32 @@ export default function PracticePage() {
         id: s.id,
         title: s.title || null,
         description: s.description || null,
-        type: (s.type || s.fundamental || "listening") as PracticeListItem["type"],
-        estimatedTime: typeof s.estimatedTime === "number" ? s.estimatedTime : 10,
+        type: (s.type ||
+          s.fundamental ||
+          "listening") as PracticeListItem["type"],
+        estimatedTime:
+          typeof s.estimatedTime === "number" ? s.estimatedTime : 10,
         progress: typeof s.progress === "number" ? s.progress : 0,
         recommended: !!s.recommended,
         completed: !!s.completed,
       }));
 
       setSessions(mapped);
+
+      // Fetch last diagnostic scores for per-fundamental logic
+      if (user?.uid) {
+        const dashRes = await fetch(`/api/student/${user.uid}/dashboard`);
+        if (dashRes.ok) {
+          const dash = await dashRes.json();
+          const f = dash?.fundamentals ?? {
+            listening: 0,
+            grasping: 0,
+            retention: 0,
+            application: 0,
+          };
+          setFundamentals(f as FundamentalsScores);
+        }
+      }
     } catch (e: any) {
       console.error(e);
       setError(e?.message || "Unable to load practice");
@@ -165,14 +203,60 @@ export default function PracticePage() {
   }
 
   useEffect(() => {
-    fetchSessions(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    // Only fetch when user is authenticated and user context finished loading
+    if (!userLoading && uid) {
+      // First get the user's latest diagnostic attempt ID
+      const fetchLatestAttemptId = async () => {
+        try {
+          const user = auth.currentUser;
+          const token = await user?.getIdToken();
+
+          const res = await fetch(`/api/student/${uid}/dashboard`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            // Get the last attempt ID from the dashboard data
+            // We need to fetch the diagnostic attempt to get its ID
+            if (data.lastDiagnostic) {
+              const diagRes = await fetch(
+                `/api/diagnostic/attempt/latest?userId=${uid}`,
+                {
+                  headers: token ? { Authorization: `Bearer ${token}` } : {},
+                }
+              );
+
+              if (diagRes.ok) {
+                const diagData = await diagRes.json();
+                if (diagData.attempt?.id) {
+                  return diagData.attempt.id;
+                }
+              }
+            }
+          }
+          return undefined;
+        } catch (error) {
+          console.error("Error fetching latest attempt ID:", error);
+          return undefined;
+        }
+      };
+
+      // Fetch the latest attempt ID and then fetch sessions
+      fetchLatestAttemptId().then((attemptId) => {
+        fetchSessions(true, attemptId);
+      });
+    }
+  }, [userLoading, uid]);
 
   const stats = useMemo(() => {
     const recommended = sessions.filter((s) => s.recommended).length;
-    const inProgress = sessions.filter((s) => s.progress > 0 && s.progress < 100).length;
-    const completed = sessions.filter((s) => s.completed || s.progress === 100).length;
+    const inProgress = sessions.filter(
+      (s) => s.progress > 0 && s.progress < 100
+    ).length;
+    const completed = sessions.filter(
+      (s) => s.completed || s.progress === 100
+    ).length;
     return { recommended, inProgress, completed };
   }, [sessions]);
 
@@ -180,12 +264,75 @@ export default function PracticePage() {
     router.push(`/student/practice/${id}`);
   };
 
+  // Ensure a session exists for the requested fundamental and navigate to it
+  const ensureAndOpen = async (fundamental: PracticeListItem["type"]) => {
+    try {
+      const existing = sessions.find(
+        (s) => s.type === fundamental && s.progress < 100
+      );
+      if (existing) {
+        return handleOpenSession(existing.id);
+      }
+      const user = auth.currentUser;
+      const token = await user?.getIdToken();
+
+      // Get the latest attempt ID
+      let attemptId;
+      try {
+        const diagRes = await fetch(
+          `/api/diagnostic/attempt/latest?userId=${user?.uid}`,
+          {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          }
+        );
+
+        if (diagRes.ok) {
+          const diagData = await diagRes.json();
+          if (diagData.attempt?.id) {
+            attemptId = diagData.attempt.id;
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching latest attempt ID:", error);
+      }
+
+      const genRes = await fetch("/api/practice/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          studentId: user?.uid,
+          fundamentals: [fundamental],
+          count: 5,
+          attemptId,
+        }),
+      });
+      if (genRes.ok) {
+        const gen = await genRes.json();
+        const created = (gen.practiceSessions || []).find(
+          (x: any) => x.fundamental === fundamental
+        );
+        // Refresh local sessions cache
+        await fetchSessions(false);
+        if (created?.id) return handleOpenSession(created.id);
+        // Fallback: try find newly fetched
+        const fresh = sessions.find((s) => s.type === fundamental);
+        if (fresh) return handleOpenSession(fresh.id);
+      }
+    } catch (e) {
+      console.error(e);
+      setError("Unable to open practice session");
+    }
+  };
+
   return (
     <AuthGuard requiredRole="student">
       <DashboardLayout
         sidebarItems={sidebarItems}
         userRole="student"
-        userName="Ram Kumar"
+        userName={auth.currentUser?.displayName || "Student"}
       >
         <div className="space-y-8">
           {/* Header */}
@@ -208,7 +355,9 @@ export default function PracticePage() {
                     <p className="text-sm font-medium text-muted-foreground">
                       Recommended
                     </p>
-                    <p className="text-2xl font-bold text-card-foreground">{stats.recommended}</p>
+                    <p className="text-2xl font-bold text-card-foreground">
+                      {stats.recommended}
+                    </p>
                   </div>
                   <Star className="h-8 w-8 text-primary" />
                 </div>
@@ -222,7 +371,9 @@ export default function PracticePage() {
                     <p className="text-sm font-medium text-muted-foreground">
                       In Progress
                     </p>
-                    <p className="text-2xl font-bold text-card-foreground">{stats.inProgress}</p>
+                    <p className="text-2xl font-bold text-card-foreground">
+                      {stats.inProgress}
+                    </p>
                   </div>
                   <Clock className="h-8 w-8 text-secondary" />
                 </div>
@@ -236,7 +387,9 @@ export default function PracticePage() {
                     <p className="text-sm font-medium text-muted-foreground">
                       Completed
                     </p>
-                    <p className="text-2xl font-bold text-card-foreground">{stats.completed}</p>
+                    <p className="text-2xl font-bold text-card-foreground">
+                      {stats.completed}
+                    </p>
                   </div>
                   <CheckCircle className="h-8 w-8 text-accent" />
                 </div>
@@ -250,103 +403,121 @@ export default function PracticePage() {
               Your Practice Exercises
             </h2>
 
-            {error && (
-              <div className="text-sm text-red-600">{error}</div>
-            )}
-            {loading && (
-              <div className="text-sm text-muted-foreground">Loading practice sessions...</div>
-            )}
+            {error && <div className="text-sm text-red-600">{error}</div>}
+            {loading && <Loader />}
 
             <div className="grid gap-6">
-              {sessions.map((practice) => (
-                <Card key={practice.id} className="border-border bg-card">
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div
-                            className={`p-2 rounded-lg ${getTypeColor(
-                              practice.type
-                            )}`}
-                          >
-                            {getTypeIcon(practice.type)}
+              {(
+                ["listening", "grasping", "retention", "application"] as const
+              ).map((f) => {
+                const list = sessions.filter((s) => s.type === f);
+                const active =
+                  list.find((s) => s.progress > 0 && s.progress < 100) ||
+                  list[0];
+                const completed = list.find(
+                  (s) => s.progress === 100 || s.completed
+                );
+                const score = fundamentals?.[f] ?? 0;
+                const progress = active?.progress ?? (completed ? 100 : 0);
+                const estimatedTime = active?.estimatedTime ?? 10;
+                const title = `${f.charAt(0).toUpperCase()}${f.slice(
+                  1
+                )} Practice`;
+                const desc = `Practice exercises for ${f} skills`;
+                const showRetry = score === 100 || progress === 100;
+                const buttonLabel = showRetry
+                  ? "Retry"
+                  : active
+                  ? progress > 0
+                    ? "Continue"
+                    : "Start"
+                  : "Start";
+                const onClick = () => {
+                  if (active) return handleOpenSession(active.id);
+                  return ensureAndOpen(f);
+                };
+
+                return (
+                  <Card key={f} className="border-border bg-card">
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-3">
+                            <div
+                              className={`p-2 rounded-lg ${getTypeColor(f)}`}
+                            >
+                              {getTypeIcon(f)}
+                            </div>
+                            <div>
+                              <h3 className="font-semibold text-card-foreground">
+                                {title}
+                              </h3>
+                              <p className="text-sm text-muted-foreground">
+                                {desc}
+                              </p>
+                            </div>
+                            {active?.recommended && (
+                              <Badge variant="secondary" className="ml-auto">
+                                <Star className="h-3 w-3 mr-1" />
+                                Recommended
+                              </Badge>
+                            )}
                           </div>
-                          <div>
-                            <h3 className="font-semibold text-card-foreground">
-                              {practice.title || "Practice Session"}
-                            </h3>
-                            <p className="text-sm text-muted-foreground">
-                              {practice.description || "Adaptive practice session"}
-                            </p>
-                          </div>
-                          {practice.recommended && (
-                            <Badge variant="secondary" className="ml-auto">
-                              <Star className="h-3 w-3 mr-1" />
-                              Recommended
+
+                          <div className="flex items-center gap-4 mb-4">
+                            <Badge className={getDifficultyColor("Medium")}>
+                              {score === 100 ? "Mastered" : "Medium"}
                             </Badge>
+                            <span className="text-sm text-muted-foreground flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {estimatedTime} min
+                            </span>
+                            <span className="text-sm text-muted-foreground capitalize">
+                              {f} skills
+                            </span>
+                          </div>
+
+                          {progress > 0 && (
+                            <div className="mb-4">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-sm text-muted-foreground">
+                                  Progress
+                                </span>
+                                <span className="text-sm text-muted-foreground">
+                                  {progress}%
+                                </span>
+                              </div>
+                              <Progress value={progress} className="h-2" />
+                            </div>
                           )}
                         </div>
 
-                        <div className="flex items-center gap-4 mb-4">
-                          <Badge className={getDifficultyColor("Medium")}>
-                            Medium
-                          </Badge>
-                          <span className="text-sm text-muted-foreground flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {practice.estimatedTime} min
-                          </span>
-                          <span className="text-sm text-muted-foreground capitalize">
-                            {practice.type} skills
-                          </span>
-                        </div>
+                        <div className="ml-6 flex flex-col gap-2">
+                          <Button
+                            variant={showRetry ? "outline" : "default"}
+                            size="sm"
+                            onClick={onClick}
+                          >
+                            {showRetry ? (
+                              <Repeat className="h-4 w-4 mr-2" />
+                            ) : (
+                              <Play className="h-4 w-4 mr-2" />
+                            )}
+                            {buttonLabel}
+                          </Button>
 
-                        {practice.progress > 0 && (
-                          <div className="mb-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm text-muted-foreground">
-                                Progress
-                              </span>
-                              <span className="text-sm text-muted-foreground">
-                                {practice.progress}%
-                              </span>
+                          {showRetry && (
+                            <div className="flex items-center gap-1 text-sm text-accent">
+                              <CheckCircle className="h-4 w-4" />
+                              Completed
                             </div>
-                            <Progress
-                              value={practice.progress}
-                              className="h-2"
-                            />
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
-
-                      <div className="ml-6 flex flex-col gap-2">
-                        {practice.progress === 100 ? (
-                          <Button variant="outline" size="sm" onClick={() => handleOpenSession(practice.id)}>
-                            <Repeat className="h-4 w-4 mr-2" />
-                            Retry
-                          </Button>
-                        ) : practice.progress > 0 ? (
-                          <Button size="sm" onClick={() => handleOpenSession(practice.id)}>
-                            <Play className="h-4 w-4 mr-2" />
-                            Continue
-                          </Button>
-                        ) : (
-                          <Button size="sm" onClick={() => handleOpenSession(practice.id)}>
-                            <Play className="h-4 w-4 mr-2" />
-                            Start
-                          </Button>
-                        )}
-
-                        {practice.progress === 100 && (
-                          <div className="flex items-center gap-1 text-sm text-accent">
-                            <CheckCircle className="h-4 w-4" />
-                            Completed
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           </div>
 
