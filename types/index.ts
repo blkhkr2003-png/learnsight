@@ -51,6 +51,8 @@ export interface DiagnosticAttempt {
     questionId: string;
     chosenIndex: number;
     correct: boolean;
+    difficulty?: number;
+    fundamentals?: Partial<Record<Fundamental, number>>;
   }[];
   expectedQuestionCount?: number; // ✅ add this
   aggregates?: Record<Fundamental, number>;

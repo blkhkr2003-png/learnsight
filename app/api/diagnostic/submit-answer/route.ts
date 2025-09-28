@@ -12,7 +12,7 @@ const QUESTIONS_COL = "questions";
 const bodySchema = z.object({
   attemptId: z.string().min(1),
   questionId: z.string().min(1),
-  chosenIndex: z.number().int().min(0),
+  chosenIndex: z.number().int().gte(-1), // -1 allowed to represent timeout/skip
 });
 
 export async function POST(req: Request) {
@@ -53,18 +53,19 @@ export async function POST(req: Request) {
         throw new Error("QUESTION_OUT_OF_SEQUENCE");
       }
 
-      // Index check
-      if (chosenIndex < 0 || chosenIndex >= (question.choices?.length ?? 0)) {
+      // Index check (allow -1 for timeout skip)
+      const choicesLen = question.choices?.length ?? 0;
+      if (chosenIndex !== -1 && (chosenIndex < 0 || chosenIndex >= choicesLen)) {
         throw new Error("INVALID_CHOSEN_INDEX");
       }
 
-      const correct = chosenIndex === question.correctChoice;
+      const correct = chosenIndex >= 0 ? chosenIndex === question.correctChoice : false;
       const answerRecord = {
         questionId,
         chosenIndex,
         correct,
-        difficulty: question.difficulty ?? null,
-        fundamentals: question.fundamentals ?? null,
+        difficulty: question.difficulty ?? undefined,
+        fundamentals: question.fundamentals ?? undefined,
       };
 
       // Ensure answers array

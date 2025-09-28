@@ -51,8 +51,10 @@ export async function POST(req: Request) {
     // 4️⃣ Update attempt doc
     await db.collection("diagnosticAttempts").doc(attemptId).update({
       scores,
+      aggregates: scores,
       weakFundamentals,
       completedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
     // 5️⃣ Return all to frontend
