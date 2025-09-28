@@ -6,7 +6,7 @@ import type { QuestionDoc } from "@/types";
 import { questionDocToDiagnosticQuestion } from "@/utils/adaptive";
 
 interface Params {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 // GET /api/practice/session/[id]
@@ -14,7 +14,7 @@ interface Params {
 export async function GET(req: Request, { params }: Params) {
   try {
     const uid = await verifyAuthHeader(req);
-    const sessionId = params.id;
+    const { id: sessionId } = await params;
     if (!sessionId) {
       return NextResponse.json({ error: "Missing session id" }, { status: 400 });
     }
@@ -93,7 +93,7 @@ const SaveSchema = z.object({
 export async function PATCH(req: Request, { params }: Params) {
   try {
     const uid = await verifyAuthHeader(req);
-    const sessionId = params.id;
+    const { id: sessionId } = await params;
     if (!sessionId) {
       return NextResponse.json({ error: "Missing session id" }, { status: 400 });
     }

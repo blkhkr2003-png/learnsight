@@ -4,7 +4,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +32,7 @@ import {
   Brain,
   Repeat,
   Zap,
+  ArrowRight,
 } from "lucide-react";
 
 interface Question {
@@ -144,8 +151,12 @@ export default function PracticeRunnerPage() {
       });
       if (!res.ok) throw new Error("Failed to save answer");
       const data = await res.json();
+
+      // Update state without triggering a loading state
       setAnswers((prev) => ({ ...prev, [questionId]: chosenIndex }));
-      if (finish || data.completed) setCompleted(true);
+      if (finish || data.completed) {
+        setCompleted(true);
+      }
     } catch (e: any) {
       console.error(e);
       setError(e?.message || "Unable to save answer");
@@ -160,12 +171,32 @@ export default function PracticeRunnerPage() {
     saveAnswer(current.id, i, last);
   }
 
-  if (userLoading || loading) {
-    return <Loader />;
-  }
+  // Show a loading overlay within the layout instead of replacing the entire layout
+  const [showLoadingOverlay, setShowLoadingOverlay] = useState(false);
+
+  useEffect(() => {
+    if (userLoading || loading) {
+      setShowLoadingOverlay(true);
+    } else {
+      setShowLoadingOverlay(false);
+    }
+  }, [userLoading, loading]);
 
   if (error) {
-    return <div className="text-red-600 p-6">{error}</div>;
+    return (
+      <AuthGuard requiredRole="student">
+        <DashboardLayout
+          sidebarItems={sidebarItems}
+          userRole="student"
+          userName=""
+        >
+          <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-3">
+            <div className="w-10 h-10 border-4 border-destructive border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm font-medium text-muted-foreground">{error}</p>
+          </div>
+        </DashboardLayout>
+      </AuthGuard>
+    );
   }
 
   return (
@@ -175,57 +206,74 @@ export default function PracticeRunnerPage() {
         userRole="student"
         userName=""
       >
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">
+        {/* Loading overlay that appears on top of the layout */}
+        {showLoadingOverlay && (
+          <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50 backdrop-blur-sm">
+            <Loader />
+          </div>
+        )}
+        <div className="max-w-4xl mx-auto space-y-8">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h1 className="text-3xl font-bold text-foreground mb-2">
                 {title || "Practice Session"}
               </h1>
-              <p className="text-sm text-muted-foreground">
-                {description || "Answer the questions below."}
-              </p>
+              <div className="flex items-center gap-4">
+                <span className="text-sm text-muted-foreground">
+                  {currentIndex + 1} of {questions.length}
+                </span>
+              </div>
             </div>
-            <div className="w-48">
-              <Progress value={progress} />
-            </div>
+            <Progress value={progress} className="h-2" />
+            <p className="text-muted-foreground">
+              {description ||
+                "Answer the questions below to improve your skills."}
+            </p>
           </div>
 
           {completed ? (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <CheckCircle className="h-5 w-5 text-green-600" /> Session
-                  completed
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-4">
-                  <Button
-                    variant="secondary"
-                    onClick={() => router.push("/student/practice")}
-                  >
-                    Back to Practice
-                  </Button>
+            <Card className="border-border bg-card text-center">
+              <CardContent className="pt-8">
+                <div className="w-16 h-16 bg-accent/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <CheckCircle className="h-8 w-8 text-accent" />
                 </div>
+                <h2 className="text-2xl font-bold text-card-foreground mb-4">
+                  Practice Completed!
+                </h2>
+                <p className="text-muted-foreground mb-8">
+                  Great job! You've completed this practice session.
+                </p>
+                <Button
+                  size="lg"
+                  onClick={() => router.push("/student/practice")}
+                >
+                  Back to Practice <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
               </CardContent>
             </Card>
           ) : current ? (
-            <Card>
+            <Card className="border-border bg-card">
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>
-                    Question {currentIndex + 1} of {questions.length}
-                  </CardTitle>
-                  <Badge variant="secondary" className="capitalize">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="px-2 py-1 bg-primary/10 text-primary text-xs font-medium rounded-full capitalize">
                     {fundamental}
-                  </Badge>
+                  </div>
+                  {typeof current.difficulty === "number" && (
+                    <div className="px-2 py-1 bg-muted text-muted-foreground text-xs font-medium rounded-full">
+                      {current.difficulty <= 2
+                        ? "Easy"
+                        : current.difficulty <= 4
+                        ? "Medium"
+                        : "Hard"}
+                    </div>
+                  )}
                 </div>
+                <CardTitle className="text-xl text-card-foreground">
+                  {current.question}
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  <div className="text-lg font-medium text-card-foreground">
-                    {current.question}
-                  </div>
                   <div className="grid gap-3">
                     {current.options.map((opt, i) => (
                       <Button
@@ -233,11 +281,14 @@ export default function PracticeRunnerPage() {
                         variant={
                           answers[current.id] === i ? "default" : "outline"
                         }
-                        className="justify-start"
+                        className="justify-start p-4 h-auto transition-all duration-200"
                         disabled={saving}
                         onClick={() => handleChoose(i)}
                       >
-                        {opt}
+                        <span className="text-left">{opt}</span>
+                        {saving && answers[current.id] === i && (
+                          <div className="ml-2 w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        )}
                       </Button>
                     ))}
                   </div>
@@ -245,9 +296,25 @@ export default function PracticeRunnerPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="text-sm text-muted-foreground">
-              No questions found.
-            </div>
+            <Card className="border-border bg-card text-center">
+              <CardContent className="pt-8">
+                <div className="w-16 h-16 bg-muted/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <BookOpen className="h-8 w-8 text-muted-foreground" />
+                </div>
+                <h2 className="text-2xl font-bold text-card-foreground mb-4">
+                  No Questions Found
+                </h2>
+                <p className="text-muted-foreground mb-8">
+                  There are no questions available in this practice session.
+                </p>
+                <Button
+                  size="lg"
+                  onClick={() => router.push("/student/practice")}
+                >
+                  Back to Practice <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </CardContent>
+            </Card>
           )}
         </div>
       </DashboardLayout>

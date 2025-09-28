@@ -1,3 +1,4 @@
+// /app/student/practice/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -143,13 +144,15 @@ export default function PracticePage() {
       const res = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      
+
       if (!res.ok) {
         const errorText = await res.text();
         console.error("API Error Response:", errorText);
-        throw new Error(`Failed to load sessions: ${res.status} ${res.statusText}`);
+        throw new Error(
+          `Failed to load sessions: ${res.status} ${res.statusText}`
+        );
       }
-      
+
       const data = await res.json();
       let arr: any[] = Array.isArray(data.sessions) ? data.sessions : [];
 
