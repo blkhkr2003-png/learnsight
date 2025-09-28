@@ -1,7 +1,12 @@
 "use client";
 
+import { Loader } from "@/components/ui/loader"; // 👈 import at top
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import AuthGuard from "@/components/auth-guard";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { DashboardLayout } from "@/components/dashboard-layout";
+import { StudentDashboardData } from "@/types";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -25,6 +30,7 @@ import {
   Zap,
 } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
 
 const sidebarItems = [
   {
@@ -50,58 +56,95 @@ const sidebarItems = [
   },
 ];
 
-// Mock data for demo
-const studentData = {
-  name: "Ram Kumar",
-  lastDiagnostic: "2024-01-15",
-  overallProgress: 78,
-  practiceStreak: 5,
-  completedPractices: 23,
-  totalPractices: 30,
-  fundamentals: {
-    listening: 85,
-    grasping: 72,
-    retention: 68,
-    application: 88,
-  },
-  recentPractices: [
-    {
-      id: 1,
-      title: "Reading Comprehension - Science",
-      completed: true,
-      score: 92,
-    },
-    { id: 2, title: "Math Problem Solving", completed: true, score: 78 },
-    {
-      id: 3,
-      title: "Listening Exercise - History",
-      completed: false,
-      score: null,
-    },
-  ],
-  recommendations: [
-    "Focus on retention exercises to improve memory skills",
-    "Practice more listening comprehension activities",
-    "Great progress in application skills - keep it up!",
-  ],
-};
-
 export default function StudentDashboard() {
+  const router = useRouter();
+  const [data, setData] = useState<StudentDashboardData | null>(null);
+  const [loading, setLoading] = useState(true); // 👈 Added loading state
+
+  useEffect(() => {
+    const auth = getAuth();
+
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        toast.error("Please log in to access your dashboard.");
+        router.push("/");
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/student/${user.uid}/dashboard`);
+        if (!res.ok) throw new Error("No data found");
+        const json: StudentDashboardData = await res.json();
+
+        if (!json) {
+          toast.error("No data available for your account.");
+          router.push("/");
+          return;
+        }
+
+        setData(json);
+      } catch (err) {
+        console.error(err);
+        toast.error("No data available for your account.");
+        router.push("/");
+      } finally {
+        setLoading(false); // 👈 Stop loading
+      }
+    });
+
+    return () => unsubscribe();
+  }, [router]);
+
+  // 👇 While loading
+  if (loading) {
+    return (
+      <AuthGuard requiredRole="student">
+        <DashboardLayout
+          sidebarItems={sidebarItems}
+          userRole="student"
+          userName=""
+        >
+          <Loader /> {/* 👈 Beautiful loader */}
+        </DashboardLayout>
+      </AuthGuard>
+    );
+  }
+
+  // 👇 In case of no data but no redirect yet
+  if (!data) {
+    return (
+      <AuthGuard requiredRole="student">
+        <DashboardLayout
+          sidebarItems={sidebarItems}
+          userRole="student"
+          userName=""
+        >
+          <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-3">
+            <div className="w-10 h-10 border-4 border-destructive border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm font-medium text-muted-foreground">
+              No data available. Please refresh or contact support.
+            </p>
+          </div>
+        </DashboardLayout>
+      </AuthGuard>
+    );
+  }
+
   return (
     <AuthGuard requiredRole="student">
       <DashboardLayout
         sidebarItems={sidebarItems}
         userRole="student"
-        userName={studentData.name}
+        userName={data.name}
       >
         <div className="space-y-8">
           {/* Welcome Section */}
           <div>
             <h1 className="text-3xl font-bold text-foreground mb-2">
-              Welcome back, {studentData.name}!
+              Welcome back, {data.name}!
             </h1>
             <p className="text-muted-foreground">
-              Ready to continue your learning journey? Let's see how you're
+              Ready to continue your learning journey? Let’s see how you’re
               progressing.
             </p>
           </div>
@@ -116,15 +159,12 @@ export default function StudentDashboard() {
                       Overall Progress
                     </p>
                     <p className="text-2xl font-bold text-card-foreground">
-                      {studentData.overallProgress}%
+                      {data.overallProgress ?? 0}%
                     </p>
                   </div>
                   <TrendingUp className="h-8 w-8 text-primary" />
                 </div>
-                <Progress
-                  value={studentData.overallProgress}
-                  className="mt-3"
-                />
+                <Progress value={data.overallProgress ?? 0} className="mt-3" />
               </CardContent>
             </Card>
 
@@ -136,7 +176,7 @@ export default function StudentDashboard() {
                       Practice Streak
                     </p>
                     <p className="text-2xl font-bold text-card-foreground">
-                      {studentData.practiceStreak} days
+                      {data.practiceStreak ?? 0} days
                     </p>
                   </div>
                   <Zap className="h-8 w-8 text-secondary" />
@@ -152,8 +192,7 @@ export default function StudentDashboard() {
                       Completed
                     </p>
                     <p className="text-2xl font-bold text-card-foreground">
-                      {studentData.completedPractices}/
-                      {studentData.totalPractices}
+                      {data.completedPractices}/{data.totalPractices}
                     </p>
                   </div>
                   <CheckCircle className="h-8 w-8 text-accent" />
@@ -169,7 +208,9 @@ export default function StudentDashboard() {
                       Last Diagnostic
                     </p>
                     <p className="text-sm font-bold text-card-foreground">
-                      Jan 15, 2024
+                      {data.lastDiagnostic
+                        ? new Date(data.lastDiagnostic).toLocaleDateString()
+                        : "N/A"}
                     </p>
                   </div>
                   <Brain className="h-8 w-8 text-primary" />
@@ -181,9 +222,8 @@ export default function StudentDashboard() {
             </Card>
           </div>
 
-          {/* Main Content Grid */}
+          {/* Learning Fundamentals */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Learning Fundamentals */}
             <div className="lg:col-span-2">
               <Card className="border-border bg-card">
                 <CardHeader>
@@ -196,67 +236,20 @@ export default function StudentDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-6">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-card-foreground">
-                          Listening Skills
-                        </span>
-                        <span className="text-sm text-muted-foreground">
-                          {studentData.fundamentals.listening}%
-                        </span>
+                    {Object.entries(data.fundamentals).map(([key, value]) => (
+                      <div className="space-y-2" key={key}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-card-foreground">
+                            {key.charAt(0).toUpperCase() + key.slice(1)}
+                          </span>
+                          <span className="text-sm text-muted-foreground">
+                            {value}%
+                          </span>
+                        </div>
+                        <Progress value={value} className="h-2" />
                       </div>
-                      <Progress
-                        value={studentData.fundamentals.listening}
-                        className="h-2"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-card-foreground">
-                          Grasping Power
-                        </span>
-                        <span className="text-sm text-muted-foreground">
-                          {studentData.fundamentals.grasping}%
-                        </span>
-                      </div>
-                      <Progress
-                        value={studentData.fundamentals.grasping}
-                        className="h-2"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-card-foreground">
-                          Retention Power
-                        </span>
-                        <span className="text-sm text-muted-foreground">
-                          {studentData.fundamentals.retention}%
-                        </span>
-                      </div>
-                      <Progress
-                        value={studentData.fundamentals.retention}
-                        className="h-2"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-card-foreground">
-                          Practice Application
-                        </span>
-                        <span className="text-sm text-muted-foreground">
-                          {studentData.fundamentals.application}%
-                        </span>
-                      </div>
-                      <Progress
-                        value={studentData.fundamentals.application}
-                        className="h-2"
-                      />
-                    </div>
+                    ))}
                   </div>
-
                   <div className="mt-6 pt-6 border-t border-border">
                     <Button className="w-full" asChild>
                       <Link href="/student/reports">View Detailed Report</Link>
@@ -266,7 +259,7 @@ export default function StudentDashboard() {
               </Card>
             </div>
 
-            {/* Quick Actions */}
+            {/* Quick Actions + Recommendations */}
             <div className="space-y-6">
               <Card className="border-border bg-card">
                 <CardHeader>
@@ -312,7 +305,7 @@ export default function StudentDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {studentData.recommendations.map((rec, index) => (
+                    {data.recommendations?.map((rec, index) => (
                       <div
                         key={index}
                         className="text-sm text-muted-foreground p-3 bg-muted/50 rounded-lg"
@@ -338,7 +331,7 @@ export default function StudentDashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {studentData.recentPractices.map((practice) => (
+                {data.recentPractices?.map((practice) => (
                   <div
                     key={practice.id}
                     className="flex items-center justify-between p-4 border border-border rounded-lg"
@@ -351,7 +344,7 @@ export default function StudentDashboard() {
                       )}
                       <div>
                         <p className="font-medium text-card-foreground">
-                          {practice.title}
+                          {practice.title || "Practice Session"}
                         </p>
                         <p className="text-sm text-muted-foreground">
                           {practice.completed ? "Completed" : "In Progress"}
@@ -359,7 +352,7 @@ export default function StudentDashboard() {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      {practice.completed && practice.score && (
+                      {practice.completed && practice.score != null && (
                         <Badge variant="secondary">{practice.score}%</Badge>
                       )}
                       {!practice.completed && (
