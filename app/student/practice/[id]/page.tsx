@@ -188,7 +188,11 @@ export default function PracticeRunnerPage() {
         <DashboardLayout
           sidebarItems={sidebarItems}
           userRole="student"
-          userName=""
+          userName={
+            auth.currentUser?.displayName ||
+            auth.currentUser?.email ||
+            "Student"
+          }
         >
           <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-3">
             <div className="w-10 h-10 border-4 border-destructive border-t-transparent rounded-full animate-spin" />
