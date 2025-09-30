@@ -1,14 +1,19 @@
 // app/api/student/[id]/update/route.ts
 import { NextResponse } from "next/server";
-import { auth, db } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import admin from "firebase-admin";
 import type { UserDoc } from "@/types";
 
+interface RouteParams {
+  params: Promise<{ id: string }>;
+}
+
 export async function PATCH(
   req: Request,
-  { params }: { params: { id: string } }
+  context: RouteParams
 ) {
+  const params = await context.params;
   try {
     // Get the authorization token from the request headers
     const authHeader = req.headers.get("authorization");
@@ -104,10 +109,10 @@ export async function PATCH(
         ...updateData,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating student profile:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to update profile" },
+      { error: error instanceof Error ? error.message : "Failed to update profile" },
       { status: 500 }
     );
   }

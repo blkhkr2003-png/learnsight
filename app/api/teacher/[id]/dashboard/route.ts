@@ -6,7 +6,6 @@ import {
   UserDoc,
   DiagnosticAttempt,
   Fundamental,
-  PracticeSessionDoc,
 } from "@/types";
 import { TeacherAlertDoc } from "@/types/teacher";
 
@@ -108,7 +107,7 @@ export async function GET(req: Request, context: any) {
           .get();
         const cname = classSnap.data()?.name;
         if (cname) className = cname;
-      } catch (e) {
+      } catch {
         // ignore
       }
     }
@@ -178,7 +177,6 @@ export async function GET(req: Request, context: any) {
     }
 
     // Active students in last 7 days from practiceSessions
-    let activeStudents = 0;
     if (studentIds.length > 0) {
       const since = admin.firestore.Timestamp.fromDate(
         new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
@@ -196,7 +194,7 @@ export async function GET(req: Request, context: any) {
           if (sid) activeSet.add(sid);
         });
       }
-      activeStudents = activeSet.size;
+      // Note: activeSet.size could be used if we need to track active students
     }
 
     // Alerts
@@ -219,9 +217,9 @@ export async function GET(req: Request, context: any) {
         .filter((a) => (a as any).completedAt)
         .map((a) => (a as any).userId)
     ).size;
-    const completionRate = students.length
-      ? Math.round((studentsWithAttempts / students.length) * 100)
-      : 0;
+    // const completionRate = students.length
+    //   ? Math.round((studentsWithAttempts / students.length) * 100)
+    //   : 0;
 
     return NextResponse.json({
       success: true,

@@ -173,7 +173,7 @@ export default function ProgressPage() {
           {/* Header */}
           <div>
             <h1 className="text-3xl font-bold text-foreground mb-2">
-              {progressData.childName}'s Progress Report
+              {progressData.childName}&apos;s Progress Report
             </h1>
             <p className="text-muted-foreground flex items-center gap-2">
               <Calendar className="h-4 w-4" />
@@ -323,7 +323,7 @@ export default function ProgressPage() {
                 Progress Insights
               </CardTitle>
               <CardDescription>
-                Key observations about {progressData.childName}'s learning
+                Key observations about {progressData.childName}&apos;s learning
                 journey
               </CardDescription>
             </CardHeader>

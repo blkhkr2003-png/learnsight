@@ -184,7 +184,7 @@ export default function ParentDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-foreground mb-2">
-                {parentData.childName}'s Learning Journey
+                {parentData.childName}&apos;s Learning Journey
               </h1>
               <p className="text-muted-foreground flex items-center gap-2">
                 <Calendar className="h-4 w-4" />
@@ -400,7 +400,7 @@ export default function ParentDashboard() {
                 How You Can Help
               </CardTitle>
               <CardDescription>
-                Personalized suggestions to support {parentData.childName}'s
+                Personalized suggestions to support {parentData.childName}&apos;s
                 learning
               </CardDescription>
             </CardHeader>

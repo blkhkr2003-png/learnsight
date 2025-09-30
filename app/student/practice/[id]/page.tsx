@@ -9,11 +9,9 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  CardDescription,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
 import { useUser } from "@/contexts/user-context";
 import { Loader } from "@/components/ui/loader";
 import AuthGuard from "@/components/auth-guard";
@@ -24,14 +22,7 @@ import {
   BookOpen,
   FileText,
   Target,
-  Play,
   CheckCircle,
-  Clock,
-  Star,
-  Headphones,
-  Brain,
-  Repeat,
-  Zap,
   ArrowRight,
 } from "lucide-react";
 
@@ -245,7 +236,7 @@ export default function PracticeRunnerPage() {
                   Practice Completed!
                 </h2>
                 <p className="text-muted-foreground mb-8">
-                  Great job! You've completed this practice session.
+                  Great job! You&apos;ve completed this practice session.
                 </p>
                 <Button
                   size="lg"

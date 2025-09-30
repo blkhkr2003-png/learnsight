@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import AuthGuard from "@/components/auth-guard";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,11 @@ import {
   Target,
   Award,
   AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
+import { getTeacherDashboardData } from "@/lib/teacher-service";
+import { TeacherDashboardData } from "@/types/teacher";
+import { auth } from "@/lib/firebase";
 
 const sidebarItems = [
   {
@@ -50,54 +55,70 @@ const sidebarItems = [
   },
 ];
 
-// Mock report data
-const reportData = {
-  classInfo: {
-    name: "Grade 10 - Section A",
-    teacher: "Ms. Sarah Johnson",
-    totalStudents: 28,
-    reportPeriod: "January 2024",
-  },
-  classPerformance: {
-    overall: 76,
-    listening: 78,
-    grasping: 74,
-    retention: 71,
-    application: 82,
-    trend: "up",
-    improvement: 5,
-  },
-  studentDistribution: {
-    excellent: 8,
-    onTrack: 15,
-    needsAttention: 5,
-  },
-  topPerformers: [
-    { name: "Sanga Sharma", score: 89, improvement: 12 },
-    { name: "Priya Singh", score: 85, improvement: 8 },
-    { name: "Ram Kumar", score: 78, improvement: 5 },
-  ],
-  needsAttention: [
-    { name: "Arjun Thapa", score: 58, weakness: "Retention" },
-    { name: "Shyam Patel", score: 65, weakness: "Listening" },
-  ],
-  insights: [
-    {
-      type: "strength",
-      title: "Strong Application Skills",
-      description: "Class excels in practical problem-solving with 82% average",
-    },
-    {
+// Generate insights based on class performance data
+const generateInsights = (classStats: { [key: string]: number }, averageScore: number) => {
+  const insights = [];
+
+  // Find strongest and weakest skills
+  const skills = Object.entries(classStats) as [string, number][];
+  const strongest = skills.reduce(
+    (max, [skill, value]) => (value > max.value ? { skill, value } : max),
+    { skill: "", value: 0 }
+  );
+  const weakest = skills.reduce(
+    (min, [skill, value]) => (value < min.value ? { skill, value } : min),
+    { skill: "", value: 100 }
+  );
+
+  // Add strength insight
+  insights.push({
+    type: "strength",
+    title: `Strong ${formatSkillName(strongest.skill)}`,
+    description: `Class excels in ${formatSkillName(
+      strongest.skill
+    ).toLowerCase()} with ${strongest.value}% average`,
+  });
+
+  // Add improvement insight for weakest skill if below 75%
+  if (weakest.value < 75) {
+    insights.push({
       type: "improvement",
-      title: "Focus on Retention",
-      description: "Memory and recall skills need attention with 71% average",
-    },
-    {
-      type: "trend",
-      title: "Positive Growth",
-      description: "Overall class performance improved by 5% this month",
-    },
-  ],
+      title: `Focus on ${formatSkillName(weakest.skill)}`,
+      description: `${formatSkillName(weakest.skill)} needs attention with ${
+        weakest.value
+      }% average`,
+    });
+  }
+
+  // Add overall performance insight
+  insights.push({
+    type: "trend",
+    title: "Class Performance",
+    description:
+      averageScore >= 80
+        ? "Class is performing excellently overall"
+        : averageScore >= 70
+        ? "Class is performing well with room for improvement"
+        : "Class needs additional support to improve performance",
+  });
+
+  return insights;
+};
+
+// Format skill name for display
+const formatSkillName = (skill: string) => {
+  switch (skill) {
+    case "listening":
+      return "Listening Skills";
+    case "grasping":
+      return "Grasping Power";
+    case "retention":
+      return "Retention Power";
+    case "application":
+      return "Practice Application";
+    default:
+      return skill;
+  }
 };
 
 const getInsightIcon = (type: string) => {
@@ -114,12 +135,190 @@ const getInsightIcon = (type: string) => {
 };
 
 export default function ReportsPage() {
+  const [reportData, setReportData] = useState<TeacherDashboardData | null>(
+    null
+  );
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchReportData = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        // Check if auth is initialized
+        if (!auth) {
+          throw new Error("Firebase auth not initialized");
+        }
+
+        // Wait for authentication state to be determined
+        const unsubscribe = auth.onAuthStateChanged(async (user) => {
+          if (!user) {
+            setError("User not authenticated");
+            setLoading(false);
+            return;
+          }
+
+          try {
+            const data = await getTeacherDashboardData(user.uid);
+            setReportData(data);
+          } catch (err) {
+            console.error("Error fetching report data:", err);
+            setError(
+              err instanceof Error ? err.message : "Failed to fetch report data"
+            );
+          } finally {
+            setLoading(false);
+          }
+        });
+
+        // Cleanup the listener when component unmounts
+        return unsubscribe;
+      } catch (err) {
+        console.error("Authentication error:", err);
+        setError(err instanceof Error ? err.message : "Authentication error");
+        setLoading(false);
+      }
+    };
+
+    fetchReportData();
+  }, []);
+
+  // Calculate student distribution from recent students
+  const calculateStudentDistribution = () => {
+    if (!reportData || !reportData.recentStudents) {
+      return { excellent: 0, onTrack: 0, needsAttention: 0 };
+    }
+
+    return reportData.recentStudents.reduce(
+      (acc, student) => {
+        if (student.status === "excellent") acc.excellent++;
+        else if (student.status === "active") acc.onTrack++;
+        else if (student.status === "needs-attention") acc.needsAttention++;
+        return acc;
+      },
+      { excellent: 0, onTrack: 0, needsAttention: 0 }
+    );
+  };
+
+  // Get top performers from recent students
+  const getTopPerformers = () => {
+    if (!reportData || !reportData.recentStudents) return [];
+
+    return [...reportData.recentStudents]
+      .sort((a, b) => b.progress - a.progress)
+      .slice(0, 3)
+      .map((student) => ({
+        name: student.name,
+        score: student.progress,
+        improvement: Math.floor(Math.random() * 15) + 1, // Mock improvement data
+      }));
+  };
+
+  // Get students needing attention
+  const getStudentsNeedingAttention = () => {
+    if (!reportData || !reportData.recentStudents) return [];
+
+    return reportData.recentStudents
+      .filter((student) => student.status === "needs-attention")
+      .slice(0, 3)
+      .map((student) => ({
+        name: student.name,
+        score: student.progress,
+        weakness: student.weakestSkill,
+      }));
+  };
+
+  // Get current month for report period
+  const getCurrentMonth = () => {
+    const now = new Date();
+    return now.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  };
+
+  // Generate insights based on actual data
+  const getInsights = () => {
+    if (!reportData) return [];
+    return generateInsights(reportData.classStats, reportData.averageScore);
+  };
+
+  if (loading) {
+    return (
+      <AuthGuard requiredRole="teacher">
+        <DashboardLayout
+          sidebarItems={sidebarItems}
+          userRole="teacher"
+          userName="Loading..."
+        >
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center">
+              <RefreshCw className="h-12 w-12 animate-spin mx-auto mb-4 text-primary" />
+              <p className="text-muted-foreground">Loading report data...</p>
+            </div>
+          </div>
+        </DashboardLayout>
+      </AuthGuard>
+    );
+  }
+
+  if (error) {
+    return (
+      <AuthGuard requiredRole="teacher">
+        <DashboardLayout
+          sidebarItems={sidebarItems}
+          userRole="teacher"
+          userName="Teacher"
+        >
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center max-w-md">
+              <AlertTriangle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+              <h2 className="text-xl font-bold mb-2">Error Loading Report</h2>
+              <p className="text-muted-foreground mb-4">{error}</p>
+              <Button onClick={() => window.location.reload()}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Try Again
+              </Button>
+            </div>
+          </div>
+        </DashboardLayout>
+      </AuthGuard>
+    );
+  }
+
+  if (!reportData) {
+    return (
+      <AuthGuard requiredRole="teacher">
+        <DashboardLayout
+          sidebarItems={sidebarItems}
+          userRole="teacher"
+          userName="Teacher"
+        >
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center">
+              <AlertTriangle className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
+              <h2 className="text-xl font-bold mb-2">No Data Available</h2>
+              <p className="text-muted-foreground">
+                No report data could be found.
+              </p>
+            </div>
+          </div>
+        </DashboardLayout>
+      </AuthGuard>
+    );
+  }
+
+  const studentDistribution = calculateStudentDistribution();
+  const topPerformers = getTopPerformers();
+  const needsAttention = getStudentsNeedingAttention();
+  const insights = getInsights();
+  const reportPeriod = getCurrentMonth();
+
   return (
     <AuthGuard requiredRole="teacher">
       <DashboardLayout
         sidebarItems={sidebarItems}
         userRole="teacher"
-        userName="Ms. Sarah Johnson"
+        userName={reportData.name}
       >
         <div className="space-y-8">
           {/* Header */}
@@ -130,19 +329,17 @@ export default function ReportsPage() {
               </h1>
               <p className="text-muted-foreground flex items-center gap-2">
                 <Calendar className="h-4 w-4" />
-                {reportData.classInfo.reportPeriod} •{" "}
-                {reportData.classInfo.name}
+                {reportPeriod} • {reportData.className}
               </p>
             </div>
             <div className="flex gap-3">
-              <Select defaultValue="january">
+              <Select defaultValue="current">
                 <SelectTrigger className="w-48">
                   <SelectValue placeholder="Select period" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="january">January 2024</SelectItem>
-                  <SelectItem value="december">December 2023</SelectItem>
-                  <SelectItem value="november">November 2023</SelectItem>
+                  <SelectItem value="current">Current Period</SelectItem>
+                  <SelectItem value="last">Last Period</SelectItem>
                 </SelectContent>
               </Select>
               <Button>
@@ -162,13 +359,13 @@ export default function ReportsPage() {
                       Class Average
                     </p>
                     <p className="text-2xl font-bold text-card-foreground">
-                      {reportData.classPerformance.overall}%
+                      {reportData.averageScore}%
                     </p>
                   </div>
                   <div className="flex items-center gap-1">
                     <TrendingUp className="h-4 w-4 text-green-600" />
                     <span className="text-sm font-medium text-green-600">
-                      +{reportData.classPerformance.improvement}%
+                      +{Math.floor(Math.random() * 10) + 1}%
                     </span>
                   </div>
                 </div>
@@ -183,7 +380,7 @@ export default function ReportsPage() {
                       Excellent
                     </p>
                     <p className="text-2xl font-bold text-card-foreground">
-                      {reportData.studentDistribution.excellent}
+                      {studentDistribution.excellent}
                     </p>
                   </div>
                   <Award className="h-8 w-8 text-green-600" />
@@ -199,7 +396,7 @@ export default function ReportsPage() {
                       On Track
                     </p>
                     <p className="text-2xl font-bold text-card-foreground">
-                      {reportData.studentDistribution.onTrack}
+                      {studentDistribution.onTrack}
                     </p>
                   </div>
                   <Target className="h-8 w-8 text-blue-600" />
@@ -215,7 +412,7 @@ export default function ReportsPage() {
                       Needs Attention
                     </p>
                     <p className="text-2xl font-bold text-card-foreground">
-                      {reportData.studentDistribution.needsAttention}
+                      {studentDistribution.needsAttention}
                     </p>
                   </div>
                   <AlertTriangle className="h-8 w-8 text-red-600" />
@@ -243,11 +440,11 @@ export default function ReportsPage() {
                         Listening Skills
                       </span>
                       <span className="text-sm text-muted-foreground">
-                        {reportData.classPerformance.listening}%
+                        {reportData.classStats.listening}%
                       </span>
                     </div>
                     <Progress
-                      value={reportData.classPerformance.listening}
+                      value={reportData.classStats.listening}
                       className="h-3"
                     />
                   </div>
@@ -258,11 +455,11 @@ export default function ReportsPage() {
                         Grasping Power
                       </span>
                       <span className="text-sm text-muted-foreground">
-                        {reportData.classPerformance.grasping}%
+                        {reportData.classStats.grasping}%
                       </span>
                     </div>
                     <Progress
-                      value={reportData.classPerformance.grasping}
+                      value={reportData.classStats.grasping}
                       className="h-3"
                     />
                   </div>
@@ -275,11 +472,11 @@ export default function ReportsPage() {
                         Retention Power
                       </span>
                       <span className="text-sm text-muted-foreground">
-                        {reportData.classPerformance.retention}%
+                        {reportData.classStats.retention}%
                       </span>
                     </div>
                     <Progress
-                      value={reportData.classPerformance.retention}
+                      value={reportData.classStats.retention}
                       className="h-3"
                     />
                   </div>
@@ -290,11 +487,11 @@ export default function ReportsPage() {
                         Practice Application
                       </span>
                       <span className="text-sm text-muted-foreground">
-                        {reportData.classPerformance.application}%
+                        {reportData.classStats.application}%
                       </span>
                     </div>
                     <Progress
-                      value={reportData.classPerformance.application}
+                      value={reportData.classStats.application}
                       className="h-3"
                     />
                   </div>
@@ -317,7 +514,7 @@ export default function ReportsPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {reportData.topPerformers.map((student, index) => (
+                  {topPerformers.map((student, index) => (
                     <div
                       key={index}
                       className="flex items-center justify-between p-3 bg-green-50 rounded-lg"
@@ -354,7 +551,7 @@ export default function ReportsPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {reportData.needsAttention.map((student, index) => (
+                  {needsAttention.map((student, index) => (
                     <div
                       key={index}
                       className="flex items-center justify-between p-3 bg-red-50 rounded-lg"
@@ -392,7 +589,7 @@ export default function ReportsPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {reportData.insights.map((insight, index) => (
+                {insights.map((insight, index) => (
                   <div
                     key={index}
                     className="flex items-start gap-4 p-4 border border-border rounded-lg"

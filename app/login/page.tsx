@@ -201,7 +201,7 @@ export default function LoginPage() {
       }
 
       // If approved, sign in the user
-      const userCredential = await signInWithEmailAndPassword(
+      await signInWithEmailAndPassword(
         auth,
         signupEmail,
         signupPassword

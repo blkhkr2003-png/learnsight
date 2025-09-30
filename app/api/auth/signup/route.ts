@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import admin from "firebase-admin";
-import type { Role, AdminUserDoc } from "@/types";
+import type { Role } from "@/types";
 
 export async function POST(req: Request) {
   try {
@@ -52,7 +52,16 @@ export async function POST(req: Request) {
     // Store profile in Firestore using admin timestamp
     const now = admin.firestore.Timestamp.now();
 
-    const userDoc: any = {
+    const userDoc: {
+      uid: string;
+      name: string;
+      email: string;
+      role: Role;
+      isApproved: boolean;
+      createdAt: admin.firestore.Timestamp;
+      lastLogin: admin.firestore.Timestamp;
+      teacherId?: string;
+    } = {
       uid: userRecord.uid,
       name,
       email,
@@ -74,10 +83,11 @@ export async function POST(req: Request) {
       { success: true, uid: userRecord.uid, isApproved },
       { status: 200 }
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("signup error:", err);
+    const errorMessage = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: err.message ?? String(err) },
+      { error: errorMessage },
       { status: 400 }
     );
   }

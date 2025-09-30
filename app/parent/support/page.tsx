@@ -205,7 +205,7 @@ export default function SupportPage() {
           {/* Header */}
           <div>
             <h1 className="text-3xl font-bold text-foreground mb-2">
-              Supporting {supportData.childName}'s Learning
+              Supporting {supportData.childName}&apos;s Learning
             </h1>
             <p className="text-muted-foreground">
               Personalized tips and strategies to help your child succeed in
@@ -295,7 +295,7 @@ export default function SupportPage() {
                 {supportData.weeklySchedule.title}
               </CardTitle>
               <CardDescription>
-                A structured approach to supporting your child's learning
+                A structured approach to supporting your child&apos;s learning
                 throughout the week
               </CardDescription>
             </CardHeader>
@@ -325,7 +325,7 @@ export default function SupportPage() {
                 Additional Resources
               </CardTitle>
               <CardDescription>
-                Helpful tools and guides for supporting your child's education
+                Helpful tools and guides for supporting your child&apos;s education
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -362,7 +362,7 @@ export default function SupportPage() {
                     Need More Help?
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    Connect with your child's teacher or our support team for
+                    Connect with your child&apos;s teacher or our support team for
                     personalized guidance
                   </p>
                 </div>

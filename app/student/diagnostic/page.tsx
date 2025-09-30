@@ -27,7 +27,6 @@ import {
   Clock,
 } from "lucide-react";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
-import { auth } from "@/lib/firebase";
 
 const sidebarItems = [
   {

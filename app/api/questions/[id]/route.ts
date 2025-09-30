@@ -3,13 +3,14 @@ import { NextResponse } from "next/server";
 import admin from "@/lib/firebase-admin";
 import { verifyAuthHeader } from "@/lib/auth";
 import { questionDocToDiagnosticQuestion } from "@/utils/adaptive";
+import type { QuestionDoc } from "@/types";
 
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const questionId = params.id;
+    const { id: questionId } = await params;
 
     if (!questionId) {
       return NextResponse.json(
@@ -33,24 +34,30 @@ export async function GET(
     }
 
     const questionData = questionSnap.data();
+    if (!questionData) {
+      return NextResponse.json(
+        { error: "Question data is empty" },
+        { status: 404 }
+      );
+    }
     questionData.id = questionId;
 
     // Convert to client-friendly format
-    const clientQuestion = questionDocToDiagnosticQuestion(questionData);
+    const clientQuestion = questionDocToDiagnosticQuestion(questionData as QuestionDoc);
 
     return NextResponse.json(
       clientQuestion,
       { status: 200 }
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Error getting question:", err);
 
-    if (err.message === "MISSING_AUTH_HEADER" || err.message === "INVALID_AUTH_TOKEN") {
+    if (err instanceof Error && (err.message === "MISSING_AUTH_HEADER" || err.message === "INVALID_AUTH_TOKEN")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     return NextResponse.json(
-      { error: err.message || "Server error" },
+      { error: err instanceof Error ? err.message : "Server error" },
       { status: 500 }
     );
   }

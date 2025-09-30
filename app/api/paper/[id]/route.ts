@@ -2,15 +2,12 @@
 import { NextResponse } from "next/server";
 import { getPaperQuestions } from "@/lib/db-admin";
 
-interface Params {
-  params: {
-    id: string;
-  };
-}
-
-export async function GET(req: Request, { params }: Params) {
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    const { id } = params;
+    const { id } = await params;
 
     if (!id) {
       return NextResponse.json({ error: "Missing paper ID" }, { status: 400 });

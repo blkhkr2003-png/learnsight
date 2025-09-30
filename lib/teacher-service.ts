@@ -8,7 +8,6 @@ import {
   where,
   orderBy,
   limit,
-  DocumentData,
   QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { UserDoc, DiagnosticAttempt, Fundamental } from "@/types";

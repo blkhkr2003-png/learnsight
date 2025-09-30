@@ -3,15 +3,12 @@ import admin from "firebase-admin";
 import { adminDb } from "@/lib/firebase-admin";
 import type {
   QuestionDoc,
-  QuestionForClient,
-  Fundamental,
   DiagnosticAttempt,
 } from "@/types";
 
 // Firestore collection names as CONSTANTS
 const QUESTIONS_COL = "questions";
 const ATTEMPTS_COL = "diagnosticAttempts";
-const PAPERS_COL = "papers";
 
 function docToQuestion(
   doc: FirebaseFirestore.QueryDocumentSnapshot
@@ -20,23 +17,13 @@ function docToQuestion(
 }
 
 // Classic Fisher–Yates shuffle to randomize arrays.
-function shuffle<T>(arr: T[]) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
-
-// Sample up to n unique docs
-function sampleDocs<T>(
-  docs: FirebaseFirestore.QueryDocumentSnapshot[],
-  n: number
-) {
-  const unique = Array.from(new Map(docs.map((d) => [d.id, d])).values());
-  shuffle(unique);
-  return unique.slice(0, n);
-}
+// function shuffle<T>(arr: T[]) {
+//   for (let i = arr.length - 1; i > 0; i--) {
+//     const j = Math.floor(Math.random() * (i + 1));
+//     [arr[i], arr[j]] = [arr[j], arr[i]];
+//   }
+//   return arr;
+// }
 
 // Fetch a single question by id
 export async function getQuestionById(id: string): Promise<QuestionDoc | null> {
@@ -87,7 +74,7 @@ export async function finalizeDiagnosticAttempt(
     aggregates?: Record<string, number>;
   }
 ) {
-  const payload: any = {};
+  const payload: { completedAt?: FirebaseFirestore.Timestamp | null; aggregates?: Record<string, number> } = {};
   if (updates.completedAt !== undefined)
     payload.completedAt = updates.completedAt;
   if (updates.aggregates !== undefined) payload.aggregates = updates.aggregates;
