@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useUser } from "@/contexts/user-context";
+import { auth } from "@/lib/firebase";
 import AuthGuard from "@/components/auth-guard";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
@@ -62,104 +64,7 @@ const sidebarItems = [
   },
 ];
 
-// Mock student data
-const studentsData = [
-  {
-    id: 1,
-    name: "Ram Kumar",
-    email: "ram@school.edu",
-    lastDiagnostic: "2024-01-15",
-    diagnosticCount: 3,
-    weakestSkill: "Retention",
-    strongestSkill: "Application",
-    overallProgress: 78,
-    fundamentals: {
-      listening: 85,
-      grasping: 72,
-      retention: 68,
-      application: 88,
-    },
-    trend: "up",
-    status: "active",
-    practiceStreak: 5,
-  },
-  {
-    id: 2,
-    name: "Shyam Patel",
-    email: "shyam@school.edu",
-    lastDiagnostic: "2024-01-14",
-    diagnosticCount: 2,
-    weakestSkill: "Listening",
-    strongestSkill: "Grasping",
-    overallProgress: 65,
-    fundamentals: {
-      listening: 58,
-      grasping: 75,
-      retention: 62,
-      application: 65,
-    },
-    trend: "down",
-    status: "needs-attention",
-    practiceStreak: 2,
-  },
-  {
-    id: 3,
-    name: "Sanga Sharma",
-    email: "sanga@school.edu",
-    lastDiagnostic: "2024-01-13",
-    diagnosticCount: 4,
-    weakestSkill: "Application",
-    strongestSkill: "Listening",
-    overallProgress: 89,
-    fundamentals: {
-      listening: 92,
-      grasping: 88,
-      retention: 85,
-      application: 91,
-    },
-    trend: "up",
-    status: "excellent",
-    practiceStreak: 12,
-  },
-  {
-    id: 4,
-    name: "Priya Singh",
-    email: "priya@school.edu",
-    lastDiagnostic: "2024-01-12",
-    diagnosticCount: 3,
-    weakestSkill: "Grasping",
-    strongestSkill: "Retention",
-    overallProgress: 72,
-    fundamentals: {
-      listening: 75,
-      grasping: 68,
-      retention: 78,
-      application: 70,
-    },
-    trend: "up",
-    status: "active",
-    practiceStreak: 7,
-  },
-  {
-    id: 5,
-    name: "Arjun Thapa",
-    email: "arjun@school.edu",
-    lastDiagnostic: "2024-01-11",
-    diagnosticCount: 1,
-    weakestSkill: "Retention",
-    strongestSkill: "Application",
-    overallProgress: 58,
-    fundamentals: {
-      listening: 62,
-      grasping: 55,
-      retention: 48,
-      application: 67,
-    },
-    trend: "down",
-    status: "needs-attention",
-    practiceStreak: 1,
-  },
-];
+// Student data is now fetched from the API
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -188,11 +93,68 @@ const getStatusLabel = (status: string) => {
 };
 
 export default function StudentsPage() {
+  const { uid, loading: authLoading } = useUser();
+  const [students, setStudents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedStudent, setSelectedStudent] = useState<number | null>(null);
 
-  const filteredStudents = studentsData.filter((student) => {
+  useEffect(() => {
+    const fetchStudents = async () => {
+      if (!uid) {
+        console.log("No UID available, skipping fetch");
+        return;
+      }
+
+      try {
+        console.log("Fetching students for teacher ID:", uid);
+        setLoading(true);
+
+        // Check if we have a valid Firebase auth user
+        const { auth } = await import("@/lib/firebase");
+        if (!auth.currentUser) {
+          console.error("No authenticated user found");
+          setError("You must be logged in to view students");
+          return;
+        }
+
+        console.log("Current user UID:", auth.currentUser.uid);
+        console.log("Teacher UID from context:", uid);
+
+        // Use client-side teacher service to fetch students directly
+        const { getStudentsByTeacherId } = await import("@/lib/teacher-service-client");
+        console.log("Calling getStudentsByTeacherId...");
+
+        const studentsData = await getStudentsByTeacherId(uid);
+        console.log("Students data received:", studentsData);
+
+        setStudents(studentsData);
+        console.log("Students state updated");
+      } catch (err) {
+        console.error('Error fetching students:', err);
+        console.error('Error type:', typeof err);
+        console.error('Error details:', JSON.stringify(err, null, 2));
+
+        let errorMessage = 'An error occurred while fetching students';
+        if (err instanceof Error) {
+          errorMessage += ': ' + err.message;
+          console.error('Error stack:', err.stack);
+        } else {
+          errorMessage += ': ' + String(err);
+        }
+
+        setError(errorMessage);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStudents();
+  }, [uid]);
+
+  const filteredStudents = students.filter((student) => {
     const matchesSearch = student.name
       .toLowerCase()
       .includes(searchTerm.toLowerCase());
@@ -200,6 +162,44 @@ export default function StudentsPage() {
       statusFilter === "all" || student.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  if (loading || authLoading) {
+    return (
+      <AuthGuard requiredRole="teacher">
+        <DashboardLayout
+          sidebarItems={sidebarItems}
+          userRole="teacher"
+          userName="Ms. Sarah Johnson"
+        >
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+              <p className="mt-4 text-muted-foreground">Loading students...</p>
+            </div>
+          </div>
+        </DashboardLayout>
+      </AuthGuard>
+    );
+  }
+
+  if (error) {
+    return (
+      <AuthGuard requiredRole="teacher">
+        <DashboardLayout
+          sidebarItems={sidebarItems}
+          userRole="teacher"
+          userName="Ms. Sarah Johnson"
+        >
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <p className="text-red-500 mb-4">{error}</p>
+              <Button onClick={() => window.location.reload()}>Try Again</Button>
+            </div>
+          </div>
+        </DashboardLayout>
+      </AuthGuard>
+    );
+  }
 
   return (
     <AuthGuard requiredRole="teacher">
@@ -227,6 +227,36 @@ export default function StudentsPage() {
               <Button variant="outline">
                 <Download className="h-4 w-4 mr-2" />
                 Export Data
+              </Button>
+              <Button 
+                onClick={async () => {
+                  // This would open a modal to add a new student
+                  const studentId = prompt("Enter student ID to assign:");
+                  if (studentId && uid) {
+                    try {
+                      // Use client-side teacher service to assign student
+                      const { updateStudentTeacherAssignment } = await import("@/lib/teacher-service-client");
+
+                      // We need to add this function to the teacher-service-client file
+                      // For now, we'll use a direct approach
+                      const { doc, updateDoc } = await import("firebase/firestore");
+                      const { db } = await import("@/lib/firebase");
+
+                      await updateDoc(doc(db, "users", studentId), {
+                        teacherId: uid
+                      });
+
+                      alert('Student assigned successfully!');
+                      window.location.reload();
+                    } catch (error) {
+                      console.error('Error:', error);
+                      alert('An error occurred while assigning student');
+                    }
+                  }
+                }}
+              >
+                <Users className="h-4 w-4 mr-2" />
+                Assign Student
               </Button>
             </div>
           </div>
@@ -333,14 +363,41 @@ export default function StudentsPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setSelectedStudent(student.id)}
-                        >
-                          <Eye className="h-4 w-4 mr-1" />
-                          View
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedStudent(student.id)}
+                          >
+                            <Eye className="h-4 w-4 mr-1" />
+                            View
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              if (confirm(`Are you sure you want to remove ${student.name} from your class?`) && uid) {
+                                try {
+                                  // Use client-side Firebase to remove student assignment
+                                  const { doc, updateDoc, deleteField } = await import("firebase/firestore");
+                                  const { db } = await import("@/lib/firebase");
+
+                                  await updateDoc(doc(db, "users", student.id), {
+                                    teacherId: deleteField()
+                                  });
+
+                                  alert('Student removed successfully!');
+                                  window.location.reload();
+                                } catch (error) {
+                                  console.error('Error:', error);
+                                  alert('An error occurred while removing student');
+                                }
+                              }
+                            }}
+                          >
+                            Remove
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -355,7 +412,7 @@ export default function StudentsPage() {
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle className="text-card-foreground">
-                    {studentsData.find((s) => s.id === selectedStudent)?.name} -
+                    {students.find((s) => s.id === selectedStudent)?.name} -
                     Detailed View
                   </CardTitle>
                   <CardDescription>
@@ -371,7 +428,7 @@ export default function StudentsPage() {
               </CardHeader>
               <CardContent>
                 {(() => {
-                  const student = studentsData.find(
+                  const student = students.find(
                     (s) => s.id === selectedStudent
                   );
                   if (!student) return null;

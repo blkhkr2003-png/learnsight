@@ -58,11 +58,20 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
+      // Validate inputs
+      if (!loginEmail.trim() || !loginPassword.trim()) {
+        throw new Error("Please enter both email and password");
+      }
+
+      // Normalize email (trim and lowercase)
+      const normalizedEmail = loginEmail.trim().toLowerCase();
+
       const userCredential = await signInWithEmailAndPassword(
         auth,
-        loginEmail,
+        normalizedEmail,
         loginPassword
       );
+
       const idToken = await userCredential.user.getIdToken();
 
       const res = await fetch("/api/auth/verify", {
@@ -99,7 +108,21 @@ export default function LoginPage() {
       router.push(`/${data.role}/dashboard`);
     } catch (err: any) {
       console.error("Login error:", err);
-      alert(err.message || "Login failed. Please check your credentials.");
+
+      // Provide more specific error messages
+      if (err.code === "auth/invalid-credential") {
+        alert("Invalid email or password. Please try again.");
+      } else if (err.code === "auth/user-not-found") {
+        alert("No account found with this email. Please sign up first.");
+      } else if (err.code === "auth/wrong-password") {
+        alert("Incorrect password. Please try again.");
+      } else if (err.code === "auth/too-many-requests") {
+        alert("Too many failed login attempts. Please try again later.");
+      } else if (err.code === "auth/user-disabled") {
+        alert("This account has been disabled. Please contact support.");
+      } else {
+        alert(err.message || "Login failed. Please check your credentials.");
+      }
     } finally {
       setIsLoading(false);
     }

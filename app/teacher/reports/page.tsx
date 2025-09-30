@@ -32,7 +32,7 @@ import {
   AlertTriangle,
   RefreshCw,
 } from "lucide-react";
-import { getTeacherDashboardData } from "@/lib/teacher-service";
+import { getTeacherDashboardData } from "@/lib/teacher-service-client";
 import { TeacherDashboardData } from "@/types/teacher";
 import { auth } from "@/lib/firebase";
 
@@ -56,7 +56,10 @@ const sidebarItems = [
 ];
 
 // Generate insights based on class performance data
-const generateInsights = (classStats: { [key: string]: number }, averageScore: number) => {
+const generateInsights = (
+  classStats: { [key: string]: number },
+  averageScore: number
+) => {
   const insights = [];
 
   // Find strongest and weakest skills
@@ -145,29 +148,59 @@ export default function ReportsPage() {
     const fetchReportData = async () => {
       setLoading(true);
       setError(null);
+      console.log("Starting to fetch report data");
 
       try {
         // Check if auth is initialized
         if (!auth) {
+          console.error("Firebase auth not initialized");
           throw new Error("Firebase auth not initialized");
         }
+
+        console.log(
+          "Firebase auth is initialized, setting up auth state listener"
+        );
 
         // Wait for authentication state to be determined
         const unsubscribe = auth.onAuthStateChanged(async (user) => {
           if (!user) {
+            console.error("User not authenticated");
             setError("User not authenticated");
             setLoading(false);
             return;
           }
 
+          console.log(
+            "User authenticated, fetching dashboard data for UID:",
+            user.uid
+          );
+
           try {
+            // Add a small delay to ensure Firebase is fully ready
+            await new Promise((resolve) => setTimeout(resolve, 500));
+
             const data = await getTeacherDashboardData(user.uid);
+            console.log("Dashboard data fetched successfully");
             setReportData(data);
           } catch (err) {
             console.error("Error fetching report data:", err);
-            setError(
-              err instanceof Error ? err.message : "Failed to fetch report data"
-            );
+            // Capture the full error details
+            let errorMessage = "Failed to fetch report data";
+            if (err instanceof Error) {
+              errorMessage = err.message;
+              // Log the full error stack for debugging
+              console.error("Error stack:", err.stack);
+            } else if (typeof err === "string") {
+              errorMessage = err;
+            } else {
+              // Try to stringify the error if it's an object
+              try {
+                errorMessage = JSON.stringify(err);
+              } catch (e) {
+                console.error("Could not stringify error:", e);
+              }
+            }
+            setError(errorMessage);
           } finally {
             setLoading(false);
           }
@@ -177,7 +210,9 @@ export default function ReportsPage() {
         return unsubscribe;
       } catch (err) {
         console.error("Authentication error:", err);
-        setError(err instanceof Error ? err.message : "Authentication error");
+        const errorMessage =
+          err instanceof Error ? err.message : "Authentication error";
+        setError(errorMessage);
         setLoading(false);
       }
     };
@@ -274,10 +309,35 @@ export default function ReportsPage() {
               <AlertTriangle className="h-16 w-16 text-red-500 mx-auto mb-4" />
               <h2 className="text-xl font-bold mb-2">Error Loading Report</h2>
               <p className="text-muted-foreground mb-4">{error}</p>
-              <Button onClick={() => window.location.reload()}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Try Again
-              </Button>
+
+              {/* Show detailed error information if it's a permission error */}
+              {error.includes("permission") && (
+                <div className="bg-red-50 p-4 rounded-lg mb-4 text-left">
+                  <p className="text-sm text-red-800 mb-2">
+                    This appears to be a permission error. Please check:
+                  </p>
+                  <ul className="text-sm text-red-700 list-disc pl-5 space-y-1">
+                    <li>You are logged in with the correct account</li>
+                    <li>Your account has teacher permissions</li>
+                    <li>
+                      Firestore security rules allow access to student data
+                    </li>
+                  </ul>
+                </div>
+              )}
+
+              <div className="flex gap-2 justify-center">
+                <Button onClick={() => window.location.reload()}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Try Again
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => (window.location.href = "/teacher/dashboard")}
+                >
+                  Back to Dashboard
+                </Button>
+              </div>
             </div>
           </div>
         </DashboardLayout>

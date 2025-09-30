@@ -1,4 +1,4 @@
-import { adminDb } from "@/lib/firebase-admin";
+
 import {
   collection,
   doc,
@@ -10,6 +10,7 @@ import {
   limit,
   QueryDocumentSnapshot,
 } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { UserDoc, DiagnosticAttempt, Fundamental } from "@/types";
 import {
   TeacherDashboardData,
@@ -34,7 +35,7 @@ const docToData = <T>(doc: QueryDocumentSnapshot): T => {
 export async function getTeacherById(
   teacherId: string
 ): Promise<UserDoc | null> {
-  const teacherDoc = await getDoc(doc(adminDb, USERS_COL, teacherId));
+  const teacherDoc = await getDoc(doc(db, USERS_COL, teacherId));
   if (!teacherDoc.exists()) return null;
   const data = teacherDoc.data() as Omit<UserDoc, "uid">;
   return { uid: teacherDoc.id, ...data };
@@ -42,7 +43,7 @@ export async function getTeacherById(
 
 // Get class by ID
 export async function getClassById(classId: string): Promise<ClassDoc | null> {
-  const classDoc = await getDoc(doc(adminDb, CLASSES_COL, classId));
+  const classDoc = await getDoc(doc(db, CLASSES_COL, classId));
   if (!classDoc.exists()) return null;
   const data = classDoc.data() as Omit<ClassDoc, "id">;
   return { id: classDoc.id, ...data };
@@ -52,15 +53,15 @@ export async function getClassById(classId: string): Promise<ClassDoc | null> {
 export async function getStudentsByTeacherId(teacherId: string): Promise<UserDoc[]> {
   try {
     console.log(`Fetching students for teacher ID: ${teacherId}`);
-    
+
     try {
       // First, try the direct query approach
       const studentsQuery = query(
-        collection(adminDb, USERS_COL),
+        collection(db, USERS_COL),
         where("role", "==", "student"),
         where("teacherId", "==", teacherId)
       );
-      
+
       const studentsSnapshot = await getDocs(studentsQuery);
       console.log(`Successfully fetched ${studentsSnapshot.docs.length} students using direct query`);
       return studentsSnapshot.docs.map((doc) => {
@@ -69,25 +70,25 @@ export async function getStudentsByTeacherId(teacherId: string): Promise<UserDoc
       });
     } catch (firestoreError) {
       console.error("Firestore query error:", firestoreError);
-      
+
       // If it's a permission error, try an alternative approach
-      if (firestoreError instanceof Error && 
-          (firestoreError.message.includes("permission") || 
+      if (firestoreError instanceof Error &&
+          (firestoreError.message.includes("permission") ||
            firestoreError.message.includes("PERMISSION_DENIED") ||
            firestoreError.message.includes("Missing or insufficient permissions"))) {
         console.log("Permission error with direct query, trying alternative approach");
-        
+
         try {
           // Alternative approach: Get all students and filter on client side
           // Note: This is less efficient but works with current security rules
           const allStudentsQuery = query(
-            collection(adminDb, USERS_COL),
+            collection(db, USERS_COL),
             where("role", "==", "student")
           );
-          
+
           const allStudentsSnapshot = await getDocs(allStudentsQuery);
           console.log(`Fetched ${allStudentsSnapshot.docs.length} total students`);
-          
+
           // Filter students by teacherId on client side
           const teacherStudents = allStudentsSnapshot.docs
             .map((doc) => {
@@ -95,7 +96,7 @@ export async function getStudentsByTeacherId(teacherId: string): Promise<UserDoc
               return { uid: doc.id, ...data };
             })
             .filter(student => student.teacherId === teacherId);
-            
+
           console.log(`Found ${teacherStudents.length} students for teacher ${teacherId} after filtering`);
           return teacherStudents;
         } catch (alternativeError) {
@@ -103,7 +104,7 @@ export async function getStudentsByTeacherId(teacherId: string): Promise<UserDoc
           throw new Error(`Failed to fetch students using both approaches. Direct query: ${firestoreError.message}. Alternative: ${alternativeError instanceof Error ? alternativeError.message : "Unknown error"}`);
         }
       }
-      
+
       // If it's not a permission error, just throw the original error
       throw firestoreError;
     }
@@ -126,10 +127,10 @@ export async function getDiagnosticAttemptsByStudentIds(
   try {
     for (let i = 0; i < studentIds.length; i += batchSize) {
       const batch = studentIds.slice(i, i + batchSize);
-      
+
       try {
         const attemptsQuery = query(
-          collection(adminDb, ATTEMPTS_COL),
+          collection(db, ATTEMPTS_COL),
           where("userId", "in", batch),
           orderBy("completedAt", "desc")
         );
@@ -141,20 +142,20 @@ export async function getDiagnosticAttemptsByStudentIds(
         results.push(...batchResults);
       } catch (batchError) {
         console.error(`Error fetching diagnostic attempts for batch ${i}:`, batchError);
-        
+
         // If it's a permission error, try an alternative approach for this batch
-        if (batchError instanceof Error && 
-            (batchError.message.includes("permission") || 
+        if (batchError instanceof Error &&
+            (batchError.message.includes("permission") ||
              batchError.message.includes("PERMISSION_DENIED") ||
              batchError.message.includes("Missing or insufficient permissions"))) {
           console.log(`Permission error with batch ${i}, trying individual requests`);
-          
+
           try {
             // Alternative approach: Get attempts for each student individually
             for (const studentId of batch) {
               try {
                 const studentAttemptsQuery = query(
-                  collection(adminDb, ATTEMPTS_COL),
+                  collection(db, ATTEMPTS_COL),
                   where("userId", "==", studentId),
                   orderBy("completedAt", "desc")
                 );
@@ -197,7 +198,7 @@ export async function getRecentDiagnosticAttemptsForStudents(
 
   for (const student of students) {
     const attemptsQuery = query(
-      collection(adminDb, ATTEMPTS_COL),
+      collection(db, ATTEMPTS_COL),
       where("userId", "==", student.uid),
       orderBy("completedAt", "desc"),
       limit(1)
@@ -261,7 +262,7 @@ export async function getRecentDiagnosticAttemptsForStudents(
 // Get teacher alerts
 export async function getTeacherAlerts(teacherId: string): Promise<Alert[]> {
   const alertsQuery = query(
-    collection(adminDb, TEACHER_ALERTS_COL),
+    collection(db, TEACHER_ALERTS_COL),
     where("teacherId", "==", teacherId),
     orderBy("createdAt", "desc"),
     limit(5)
@@ -367,7 +368,7 @@ export async function getTeacherDashboardData(
   teacherId: string
 ): Promise<TeacherDashboardData> {
   console.log(`Fetching dashboard data for teacher: ${teacherId}`);
-  
+
   try {
     // Get teacher data
     let teacher;
@@ -398,80 +399,66 @@ export async function getTeacherDashboardData(
     }
 
     // Get students assigned to this teacher
-    let students = [];
+    let students;
     try {
       students = await getStudentsByTeacherId(teacherId);
-      console.log(`Found ${students.length} students`);
+      console.log(`Found ${students.length} students for teacher ${teacherId}`);
     } catch (error) {
       console.error("Error fetching students:", error);
-      // Provide more detailed error information
-      if (error instanceof Error) {
-        // Check if it's a Firestore permission error
-        if (error.message.includes("permission") || error.message.includes("PERMISSION_DENIED")) {
-          console.error("Firestore permission error details:", error);
-          throw new Error(`Firestore permission error: ${error.message}`);
-        }
-        // Pass along the original error message with more context
-        throw new Error(`Failed to fetch students: ${error.message}`);
-      }
-      // If it's not a standard Error object, provide as much info as possible
-      throw new Error(`Failed to fetch students: ${JSON.stringify(error)}`);
+      throw new Error("Failed to fetch students");
     }
 
     // Get diagnostic attempts for these students
-    let attempts = [];
+    let attempts;
     try {
-      attempts = await getDiagnosticAttemptsByStudentIds(
-        students.map((s) => s.uid)
-      );
+      const studentIds = students.map((s) => s.uid);
+      attempts = await getDiagnosticAttemptsByStudentIds(studentIds);
       console.log(`Found ${attempts.length} diagnostic attempts`);
     } catch (error) {
       console.error("Error fetching diagnostic attempts:", error);
-      // Continue with empty attempts rather than failing completely
+      // Continue with empty attempts array
+      attempts = [];
     }
 
-    // Calculate statistics
-    const classStats = calculateClassStats(attempts);
-    const averageScore = calculateAverageScore(attempts);
-
-    // Get recent student activity
-    let recentStudents = [];
+    // Get recent student data
+    let recentStudents;
     try {
-      recentStudents = await getRecentDiagnosticAttemptsForStudents(students, 5);
+      recentStudents = await getRecentDiagnosticAttemptsForStudents(students);
+      console.log(`Generated recent student data for ${recentStudents.length} students`);
     } catch (error) {
-      console.error("Error fetching recent students:", error);
-      // Continue with empty recent students rather than failing completely
+      console.error("Error generating recent student data:", error);
+      // Continue with empty array
+      recentStudents = [];
     }
 
     // Get teacher alerts
-    let alerts = [];
+    let alerts;
     try {
       alerts = await getTeacherAlerts(teacherId);
+      console.log(`Found ${alerts.length} alerts for teacher`);
     } catch (error) {
-      console.error("Error fetching teacher alerts:", error);
-      // Continue with empty alerts rather than failing completely
+      console.error("Error fetching alerts:", error);
+      // Continue with empty array
+      alerts = [];
     }
 
-    // Count students who have completed diagnostics
-    const studentsWithAttempts = new Set(
-      attempts.filter((a) => a.completedAt).map((a) => a.userId)
-    ).size;
+    // Calculate class statistics
+    const classStats = calculateClassStats(attempts);
+    console.log("Calculated class stats:", classStats);
 
-    console.log(`Returning dashboard data with ${students.length} students, ${studentsWithAttempts} completed`);
-    
+    // Calculate average score
+    const averageScore = calculateAverageScore(attempts);
+    console.log(`Calculated average score: ${averageScore}%`);
+
+    // Return all the data needed for the dashboard
     return {
       name: teacher.name,
       className,
-      totalStudents: students.length,
-      studentsCompleted: studentsWithAttempts,
-      averageScore,
+      studentCount: students.length,
       classStats,
+      averageScore,
       recentStudents,
-      alerts: alerts.map((alert) => ({
-        type: alert.type || "info",
-        message: alert.message,
-        action: alert.action || "View details",
-      })),
+      alerts,
     };
   } catch (error) {
     console.error("Error in getTeacherDashboardData:", error);
