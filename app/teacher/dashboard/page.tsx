@@ -106,7 +106,8 @@ const getStatusLabel = (status: RecentStudent["status"]) => {
 
 export default function TeacherDashboard() {
   const { uid } = useUser();
-  const [teacherData, setTeacherData] = useState<TeacherDashboardData>(defaultTeacherData);
+  const [teacherData, setTeacherData] =
+    useState<TeacherDashboardData>(defaultTeacherData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -125,8 +126,8 @@ export default function TeacherDashboard() {
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           const errorMessage = err?.error || `HTTP ${res.status}`;
-          const errorDetails = err?.details || '';
-          setError(errorMessage + (errorDetails ? `: ${errorDetails}` : ''));
+          const errorDetails = err?.details || "";
+          setError(errorMessage + (errorDetails ? `: ${errorDetails}` : ""));
           return;
         }
         const payload = await res.json();
@@ -134,7 +135,9 @@ export default function TeacherDashboard() {
         setTeacherData(payload.data as TeacherDashboardData);
       } catch (error) {
         console.error("Error fetching teacher dashboard data:", error);
-        setError(error instanceof Error ? error.message : "Unknown error occurred");
+        setError(
+          error instanceof Error ? error.message : "Unknown error occurred"
+        );
       } finally {
         setLoading(false);
       }
@@ -173,7 +176,9 @@ export default function TeacherDashboard() {
           <div className="flex items-center justify-center h-full">
             <div className="text-center max-w-md">
               <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
-              <h2 className="text-xl font-bold mb-2">Error Loading Dashboard</h2>
+              <h2 className="text-xl font-bold mb-2">
+                Error Loading Dashboard
+              </h2>
               <p className="text-muted-foreground mb-2">{error}</p>
               <div className="bg-gray-100 p-4 rounded-md mb-6 text-sm">
                 <p className="font-mono text-xs break-all">{error}</p>
@@ -204,6 +209,33 @@ export default function TeacherDashboard() {
             <p className="text-muted-foreground">
               {teacherData.className} • {teacherData.totalStudents} students
             </p>
+
+            {/* Teacher ID Card */}
+            <Card className="mt-4 border-border bg-card">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-card-foreground text-lg">
+                  Your Teacher ID
+                </CardTitle>
+                <CardDescription>
+                  Share this ID with your students so they can connect to your
+                  account
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="flex items-center justify-between">
+                  <div className="bg-muted p-3 rounded-md flex-1 mr-3">
+                    <code className="text-sm font-mono break-all">{uid}</code>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => navigator.clipboard.writeText(uid || "")}
+                  >
+                    Copy
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Quick Stats */}
@@ -272,7 +304,11 @@ export default function TeacherDashboard() {
                       Need Attention
                     </p>
                     <p className="text-2xl font-bold text-card-foreground">
-                      {teacherData.recentStudents.filter(s => s.status === "needs-attention").length}
+                      {
+                        teacherData.recentStudents.filter(
+                          (s) => s.status === "needs-attention"
+                        ).length
+                      }
                     </p>
                   </div>
                   <AlertCircle className="h-8 w-8 text-red-500" />
@@ -450,12 +486,14 @@ export default function TeacherDashboard() {
                     {(() => {
                       const stats = teacherData.classStats;
                       const entries = Object.entries(stats);
-                      const strongest = entries.reduce((max, [key, value]) => 
-                        value > max.value ? { key, value } : max, 
+                      const strongest = entries.reduce(
+                        (max, [key, value]) =>
+                          value > max.value ? { key, value } : max,
                         { key: "", value: 0 }
                       );
-                      const weakest = entries.reduce((min, [key, value]) => 
-                        value < min.value ? { key, value } : min, 
+                      const weakest = entries.reduce(
+                        (min, [key, value]) =>
+                          value < min.value ? { key, value } : min,
                         { key: "", value: 100 }
                       );
 
@@ -463,7 +501,7 @@ export default function TeacherDashboard() {
                         listening: "Listening Skills",
                         grasping: "Grasping Power",
                         retention: "Retention Power",
-                        application: "Practice Application"
+                        application: "Practice Application",
                       };
 
                       return (
@@ -473,7 +511,12 @@ export default function TeacherDashboard() {
                               Strongest Area
                             </p>
                             <p className="text-muted-foreground">
-                              {skillNames[strongest.key as keyof typeof skillNames]} ({strongest.value}%)
+                              {
+                                skillNames[
+                                  strongest.key as keyof typeof skillNames
+                                ]
+                              }{" "}
+                              ({strongest.value}%)
                             </p>
                           </div>
                           <div className="text-sm">
@@ -481,7 +524,12 @@ export default function TeacherDashboard() {
                               Needs Focus
                             </p>
                             <p className="text-muted-foreground">
-                              {skillNames[weakest.key as keyof typeof skillNames]} ({weakest.value}%)
+                              {
+                                skillNames[
+                                  weakest.key as keyof typeof skillNames
+                                ]
+                              }{" "}
+                              ({weakest.value}%)
                             </p>
                           </div>
                           <div className="text-sm">
@@ -489,7 +537,12 @@ export default function TeacherDashboard() {
                               Completion Rate
                             </p>
                             <p className="text-muted-foreground">
-                              {Math.round((teacherData.studentsCompleted / teacherData.totalStudents) * 100)}% of students
+                              {Math.round(
+                                (teacherData.studentsCompleted /
+                                  teacherData.totalStudents) *
+                                  100
+                              )}
+                              % of students
                             </p>
                           </div>
                         </>
