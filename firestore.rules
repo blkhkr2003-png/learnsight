@@ -1,0 +1,43 @@
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users can read and write their own user document
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Users can read their own class data
+    match /classes/{classId} {
+      allow read: if request.auth != null && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.classId == classId;
+    }
+
+    // Practice sessions can be read by the student who owns them
+    match /practiceSessions/{sessionId} {
+      allow read, create: if request.auth != null && 
+        request.auth.uid == resource.data.studentId;
+      allow update: if request.auth != null && 
+        request.auth.uid == resource.data.studentId;
+    }
+
+    // Diagnostic attempts can be read by the student who owns them
+    match /diagnosticAttempts/{attemptId} {
+      allow read, create: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+      allow update: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+    }
+
+    // Questions can be read by authenticated users
+    match /questions/{questionId} {
+      allow read: if request.auth != null;
+    }
+
+    // Teacher alerts can be read by the teacher they belong to
+    match /teacherAlerts/{alertId} {
+      allow read: if request.auth != null && 
+        request.auth.uid == resource.data.teacherId;
+    }
+  }
+}

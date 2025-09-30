@@ -132,7 +132,10 @@ export default function PracticePage() {
       const user = auth.currentUser;
       const token = await user?.getIdToken();
       if (!user) {
-        throw new Error("User not authenticated");
+        // Instead of throwing an error, we'll set an error message and return
+        setError("User not authenticated. Please log in again.");
+        setLoading(false);
+        return;
       }
 
       // Build URL with attemptId if provided

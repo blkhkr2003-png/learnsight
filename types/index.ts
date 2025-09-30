@@ -6,6 +6,8 @@ export interface UserDoc {
   name: string;
   email: string;
   role: Role;
+  teacherId?: string; // For students: the uid of their teacher
+  classId?: string; // For teachers: the class they teach, for students: the class they belong to
   isApproved?: boolean;
   createdAt?: any; // Firestore Timestamp | FieldValue | Date
   lastLogin?: any; // Firestore Timestamp | FieldValue | Date

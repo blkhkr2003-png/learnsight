@@ -1,5 +1,8 @@
+// /app/teacher/dashboard/page.tsx
+
 "use client";
 
+import { useEffect, useState } from "react";
 import AuthGuard from "@/components/auth-guard";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
@@ -35,6 +38,9 @@ import {
   Target,
 } from "lucide-react";
 import Link from "next/link";
+import { useUser } from "@/contexts/user-context";
+import { auth } from "@/lib/firebase";
+import { TeacherDashboardData, RecentStudent, Alert } from "@/types/teacher";
 
 const sidebarItems = [
   {
@@ -55,81 +61,24 @@ const sidebarItems = [
   },
 ];
 
-// Mock teacher data
-const teacherData = {
-  name: "Ms. Sarah Johnson",
-  className: "Grade 10 - Section A",
-  totalStudents: 28,
-  studentsCompleted: 25,
-  averageScore: 76,
+// Default teacher data structure
+const defaultTeacherData: TeacherDashboardData = {
+  name: "",
+  className: "",
+  totalStudents: 0,
+  studentsCompleted: 0,
+  averageScore: 0,
   classStats: {
-    listening: 78,
-    grasping: 74,
-    retention: 71,
-    application: 82,
+    listening: 0,
+    grasping: 0,
+    retention: 0,
+    application: 0,
   },
-  recentStudents: [
-    {
-      id: 1,
-      name: "Ram Kumar",
-      lastDiagnostic: "2024-01-15",
-      weakestSkill: "Retention",
-      progress: 78,
-      trend: "up",
-      status: "active",
-    },
-    {
-      id: 2,
-      name: "Shyam Patel",
-      lastDiagnostic: "2024-01-14",
-      weakestSkill: "Listening",
-      progress: 65,
-      trend: "down",
-      status: "needs-attention",
-    },
-    {
-      id: 3,
-      name: "Sanga Sharma",
-      lastDiagnostic: "2024-01-13",
-      weakestSkill: "Application",
-      progress: 89,
-      trend: "up",
-      status: "excellent",
-    },
-    {
-      id: 4,
-      name: "Priya Singh",
-      lastDiagnostic: "2024-01-12",
-      weakestSkill: "Grasping",
-      progress: 72,
-      trend: "up",
-      status: "active",
-    },
-    {
-      id: 5,
-      name: "Arjun Thapa",
-      lastDiagnostic: "2024-01-11",
-      weakestSkill: "Retention",
-      progress: 58,
-      trend: "down",
-      status: "needs-attention",
-    },
-  ],
-  alerts: [
-    {
-      type: "warning",
-      message: "3 students haven't taken diagnostic test this week",
-      action: "Send reminder",
-    },
-    {
-      type: "info",
-      message: "Class average improved by 5% this month",
-      action: "View details",
-    },
-  ],
+  recentStudents: [],
+  alerts: [],
 };
 
-const getStatusColor = (status: string) => {
+const getStatusColor = (status: RecentStudent["status"]) => {
   switch (status) {
     case "excellent":
       return "bg-green-100 text-green-800";
@@ -142,7 +91,7 @@ const getStatusColor = (status: string) => {
   }
 };
 
-const getStatusLabel = (status: string) => {
+const getStatusLabel = (status: RecentStudent["status"]) => {
   switch (status) {
     case "excellent":
       return "Excellent";
@@ -156,6 +105,89 @@ const getStatusLabel = (status: string) => {
 };
 
 export default function TeacherDashboard() {
+  const { uid } = useUser();
+  const [teacherData, setTeacherData] = useState<TeacherDashboardData>(defaultTeacherData);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchTeacherData() {
+      if (!uid) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        const res = await fetch(`/api/teacher/${uid}/dashboard`, {
+          headers: {
+            Authorization: token ? `Bearer ${token}` : "",
+          },
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          const errorMessage = err?.error || `HTTP ${res.status}`;
+          const errorDetails = err?.details || '';
+          setError(errorMessage + (errorDetails ? `: ${errorDetails}` : ''));
+          return;
+        }
+        const payload = await res.json();
+        // API returns { success: true, data: TeacherDashboardData }
+        setTeacherData(payload.data as TeacherDashboardData);
+      } catch (error) {
+        console.error("Error fetching teacher dashboard data:", error);
+        setError(error instanceof Error ? error.message : "Unknown error occurred");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchTeacherData();
+  }, [uid]);
+
+  if (loading) {
+    return (
+      <AuthGuard requiredRole="teacher">
+        <DashboardLayout
+          sidebarItems={sidebarItems}
+          userRole="teacher"
+          userName="Loading..."
+        >
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+              <p className="mt-4 text-muted-foreground">Loading dashboard...</p>
+            </div>
+          </div>
+        </DashboardLayout>
+      </AuthGuard>
+    );
+  }
+
+  if (error) {
+    return (
+      <AuthGuard requiredRole="teacher">
+        <DashboardLayout
+          sidebarItems={sidebarItems}
+          userRole="teacher"
+          userName="Teacher"
+        >
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center max-w-md">
+              <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+              <h2 className="text-xl font-bold mb-2">Error Loading Dashboard</h2>
+              <p className="text-muted-foreground mb-2">{error}</p>
+              <div className="bg-gray-100 p-4 rounded-md mb-6 text-sm">
+                <p className="font-mono text-xs break-all">{error}</p>
+              </div>
+              <Button onClick={() => window.location.reload()}>
+                Try Again
+              </Button>
+            </div>
+          </div>
+        </DashboardLayout>
+      </AuthGuard>
+    );
+  }
+
   return (
     <AuthGuard requiredRole="teacher">
       <DashboardLayout
@@ -239,7 +271,9 @@ export default function TeacherDashboard() {
                     <p className="text-sm font-medium text-muted-foreground">
                       Need Attention
                     </p>
-                    <p className="text-2xl font-bold text-card-foreground">2</p>
+                    <p className="text-2xl font-bold text-card-foreground">
+                      {teacherData.recentStudents.filter(s => s.status === "needs-attention").length}
+                    </p>
                   </div>
                   <AlertCircle className="h-8 w-8 text-red-500" />
                 </div>
@@ -254,7 +288,7 @@ export default function TeacherDashboard() {
                 Alerts & Notifications
               </h2>
               <div className="space-y-3">
-                {teacherData.alerts.map((alert, index) => (
+                {teacherData.alerts.map((alert: Alert, index: number) => (
                   <Card key={index} className="border-border bg-card">
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between">
@@ -413,30 +447,54 @@ export default function TeacherDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    <div className="text-sm">
-                      <p className="font-medium text-card-foreground mb-1">
-                        Strongest Area
-                      </p>
-                      <p className="text-muted-foreground">
-                        Practice Application (82%)
-                      </p>
-                    </div>
-                    <div className="text-sm">
-                      <p className="font-medium text-card-foreground mb-1">
-                        Needs Focus
-                      </p>
-                      <p className="text-muted-foreground">
-                        Retention Power (71%)
-                      </p>
-                    </div>
-                    <div className="text-sm">
-                      <p className="font-medium text-card-foreground mb-1">
-                        Improvement
-                      </p>
-                      <p className="text-muted-foreground">
-                        +5% from last month
-                      </p>
-                    </div>
+                    {(() => {
+                      const stats = teacherData.classStats;
+                      const entries = Object.entries(stats);
+                      const strongest = entries.reduce((max, [key, value]) => 
+                        value > max.value ? { key, value } : max, 
+                        { key: "", value: 0 }
+                      );
+                      const weakest = entries.reduce((min, [key, value]) => 
+                        value < min.value ? { key, value } : min, 
+                        { key: "", value: 100 }
+                      );
+
+                      const skillNames = {
+                        listening: "Listening Skills",
+                        grasping: "Grasping Power",
+                        retention: "Retention Power",
+                        application: "Practice Application"
+                      };
+
+                      return (
+                        <>
+                          <div className="text-sm">
+                            <p className="font-medium text-card-foreground mb-1">
+                              Strongest Area
+                            </p>
+                            <p className="text-muted-foreground">
+                              {skillNames[strongest.key as keyof typeof skillNames]} ({strongest.value}%)
+                            </p>
+                          </div>
+                          <div className="text-sm">
+                            <p className="font-medium text-card-foreground mb-1">
+                              Needs Focus
+                            </p>
+                            <p className="text-muted-foreground">
+                              {skillNames[weakest.key as keyof typeof skillNames]} ({weakest.value}%)
+                            </p>
+                          </div>
+                          <div className="text-sm">
+                            <p className="font-medium text-card-foreground mb-1">
+                              Completion Rate
+                            </p>
+                            <p className="text-muted-foreground">
+                              {Math.round((teacherData.studentsCompleted / teacherData.totalStudents) * 100)}% of students
+                            </p>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 </CardContent>
               </Card>
@@ -471,7 +529,7 @@ export default function TeacherDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {teacherData.recentStudents.map((student) => (
+                  {teacherData.recentStudents.map((student: RecentStudent) => (
                     <TableRow key={student.id}>
                       <TableCell className="font-medium">
                         {student.name}
