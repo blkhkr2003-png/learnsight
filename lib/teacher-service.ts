@@ -19,6 +19,9 @@ import {
   TeacherAlertDoc,
 } from "@/types/teacher";
 
+// Type for adminDb to make it compatible with client-side firestore functions
+const firestore = adminDb as any;
+
 // Collections
 const USERS_COL = "users";
 const CLASSES_COL = "classes";
@@ -34,7 +37,7 @@ const docToData = <T>(doc: QueryDocumentSnapshot): T => {
 export async function getTeacherById(
   teacherId: string
 ): Promise<UserDoc | null> {
-  const teacherDoc = await getDoc(doc(adminDb, USERS_COL, teacherId));
+  const teacherDoc = await getDoc(doc(firestore, USERS_COL, teacherId));
   if (!teacherDoc.exists()) return null;
   const data = teacherDoc.data() as Omit<UserDoc, "uid">;
   return { uid: teacherDoc.id, ...data };
@@ -42,7 +45,7 @@ export async function getTeacherById(
 
 // Get class by ID
 export async function getClassById(classId: string): Promise<ClassDoc | null> {
-  const classDoc = await getDoc(doc(adminDb, CLASSES_COL, classId));
+  const classDoc = await getDoc(doc(firestore, CLASSES_COL, classId));
   if (!classDoc.exists()) return null;
   const data = classDoc.data() as Omit<ClassDoc, "id">;
   return { id: classDoc.id, ...data };
@@ -56,7 +59,7 @@ export async function getStudentsByTeacherId(teacherId: string): Promise<UserDoc
     try {
       // First, try the direct query approach
       const studentsQuery = query(
-        collection(adminDb, USERS_COL),
+        collection(firestore, USERS_COL),
         where("role", "==", "student"),
         where("teacherId", "==", teacherId)
       );
@@ -81,7 +84,7 @@ export async function getStudentsByTeacherId(teacherId: string): Promise<UserDoc
           // Alternative approach: Get all students and filter on client side
           // Note: This is less efficient but works with current security rules
           const allStudentsQuery = query(
-            collection(adminDb, USERS_COL),
+            collection(firestore, USERS_COL),
             where("role", "==", "student")
           );
           
@@ -129,7 +132,7 @@ export async function getDiagnosticAttemptsByStudentIds(
       
       try {
         const attemptsQuery = query(
-          collection(adminDb, ATTEMPTS_COL),
+          collection(firestore, ATTEMPTS_COL),
           where("userId", "in", batch),
           orderBy("completedAt", "desc")
         );
@@ -154,7 +157,7 @@ export async function getDiagnosticAttemptsByStudentIds(
             for (const studentId of batch) {
               try {
                 const studentAttemptsQuery = query(
-                  collection(adminDb, ATTEMPTS_COL),
+                  collection(firestore, ATTEMPTS_COL),
                   where("userId", "==", studentId),
                   orderBy("completedAt", "desc")
                 );
@@ -197,7 +200,7 @@ export async function getRecentDiagnosticAttemptsForStudents(
 
   for (const student of students) {
     const attemptsQuery = query(
-      collection(adminDb, ATTEMPTS_COL),
+      collection(firestore, ATTEMPTS_COL),
       where("userId", "==", student.uid),
       orderBy("completedAt", "desc"),
       limit(1)
@@ -261,7 +264,7 @@ export async function getRecentDiagnosticAttemptsForStudents(
 // Get teacher alerts
 export async function getTeacherAlerts(teacherId: string): Promise<Alert[]> {
   const alertsQuery = query(
-    collection(adminDb, TEACHER_ALERTS_COL),
+    collection(firestore, TEACHER_ALERTS_COL),
     where("teacherId", "==", teacherId),
     orderBy("createdAt", "desc"),
     limit(5)
@@ -398,7 +401,7 @@ export async function getTeacherDashboardData(
     }
 
     // Get students assigned to this teacher
-    let students = [];
+    let students: UserDoc[] = [];
     try {
       students = await getStudentsByTeacherId(teacherId);
       console.log(`Found ${students.length} students`);
@@ -419,7 +422,7 @@ export async function getTeacherDashboardData(
     }
 
     // Get diagnostic attempts for these students
-    let attempts = [];
+    let attempts: DiagnosticAttempt[] = [];
     try {
       attempts = await getDiagnosticAttemptsByStudentIds(
         students.map((s) => s.uid)
@@ -435,7 +438,7 @@ export async function getTeacherDashboardData(
     const averageScore = calculateAverageScore(attempts);
 
     // Get recent student activity
-    let recentStudents = [];
+    let recentStudents: RecentStudent[] = [];
     try {
       recentStudents = await getRecentDiagnosticAttemptsForStudents(students, 5);
     } catch (error) {
@@ -444,7 +447,7 @@ export async function getTeacherDashboardData(
     }
 
     // Get teacher alerts
-    let alerts = [];
+    let alerts: Alert[] = [];
     try {
       alerts = await getTeacherAlerts(teacherId);
     } catch (error) {

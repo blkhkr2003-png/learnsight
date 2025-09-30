@@ -237,14 +237,7 @@ export default function StudentsPage() {
                       // Use client-side teacher service to assign student
                       const { updateStudentTeacherAssignment } = await import("@/lib/teacher-service-client");
 
-                      // We need to add this function to the teacher-service-client file
-                      // For now, we'll use a direct approach
-                      const { doc, updateDoc } = await import("firebase/firestore");
-                      const { db } = await import("@/lib/firebase");
-
-                      await updateDoc(doc(db, "users", studentId), {
-                        teacherId: uid
-                      });
+                      await updateStudentTeacherAssignment(studentId, uid);
 
                       alert('Student assigned successfully!');
                       window.location.reload();

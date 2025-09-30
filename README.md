@@ -40,17 +40,196 @@ LearnSight is an adaptive learning platform that diagnoses student strengths and
 
 ```bash
 learnsight/
-├── app/ # Next.js App Router pages
-│ ├── login/ # Auth pages
-│ ├── parent/ # Parent dashboard
-│ ├── student/ # Student dashboard, diagnostic, reports
-│ ├── teacher/ # Teacher dashboard
-│ └── page.tsx # Landing page
-├── components/ # Shared UI components
-├── public/ # Static assets
-├── styles/ # Global styles (Tailwind, etc.)
-├── package.json
-└── README.md
+.firebase/
+    └── hosting.cHVibGlj.cache
+.github/
+    └── workflows/
+        ├── firebase-hosting-merge.yml
+        └── firebase-hosting-pull-request.yml
+app/
+    ├── api/
+        ├── auth/
+            ├── signup/
+                └── route.ts
+            └── verify/
+                └── route.ts
+        ├── diagnostic/
+            ├── attempt/
+                └── latest/
+                    └── route.ts
+            ├── complete/
+                └── route.ts
+            ├── get-attempt/
+                └── route.ts
+            ├── next-question/
+                └── route.ts
+            ├── start-attempt/
+                └── route.ts
+            └── submit-answer/
+                └── route.ts
+        ├── paper/
+            └── [id]/
+                └── route.ts
+        ├── practice/
+            ├── generate/
+                └── route.ts
+            ├── session/
+                └── [id]/
+                    └── route.ts
+            └── sessions/
+                └── route.ts
+        ├── questions/
+            └── [id]/
+                └── route.ts
+        ├── student/
+            └── [id]/
+                ├── dashboard/
+                    └── route.ts
+                ├── radar/
+                    └── route.ts
+                ├── reports/
+                    └── route.ts
+                └── update/
+                    └── route.ts
+        └── teacher/
+            └── [id]/
+                ├── alerts/
+                    └── route.ts
+                ├── dashboard/
+                    └── route.ts
+                ├── reports/
+                    └── route.ts
+                └── students/
+                    └── route.ts
+    ├── dev-auth/
+        └── page.tsx
+    ├── login/
+        ├── loading.tsx
+        └── page.tsx
+    ├── parent/
+        ├── dashboard/
+            └── page.tsx
+        ├── progress/
+            └── page.tsx
+        └── support/
+            └── page.tsx
+    ├── student/
+        ├── dashboard/
+            └── page.tsx
+        ├── diagnostic/
+            └── page.tsx
+        ├── practice/
+            ├── [id]/
+                └── page.tsx
+            └── page.tsx
+        ├── profile/
+            └── page.tsx
+        └── reports/
+            └── page.tsx
+    ├── teacher/
+        ├── dashboard/
+            └── page.tsx
+        ├── reports/
+            └── page.tsx
+        └── students/
+            ├── loading.tsx
+            └── page.tsx
+    ├── globals.css
+    ├── layout.tsx
+    └── page.tsx
+components/
+    ├── layout/
+        ├── footer.tsx
+        └── navbar.tsx
+    ├── ui/
+        ├── badge.tsx
+        ├── button.tsx
+        ├── card.tsx
+        ├── input.tsx
+        ├── label.tsx
+        ├── loader.tsx
+        ├── progress.tsx
+        ├── radio-group.tsx
+        ├── select.tsx
+        ├── sheet.tsx
+        ├── table.tsx
+        ├── tabs.tsx
+        └── textarea.tsx
+    ├── auth-guard.tsx
+    ├── dashboard-layout.tsx
+    ├── practice-card.tsx
+    └── radar-chart.tsx
+contexts/
+    └── user-context.tsx
+dataconnect/
+    ├── example/
+        ├── connector.yaml
+        ├── mutations.gql
+        └── queries.gql
+    ├── schema/
+        └── schema.gql
+    └── dataconnect.yaml
+dist/
+    ├── scripts/
+        └── seed-demo.js
+    ├── types/
+        └── index.js
+    └── seed-demo.js
+lib/
+    ├── auth-context.tsx
+    ├── auth.ts
+    ├── auth.ts.new
+    ├── db-admin.ts
+    ├── firebase-admin.ts
+    ├── firebase.ts
+    ├── teacher-service-client-part2.ts
+    ├── teacher-service-client.ts
+    ├── teacher-service.ts
+    └── utils.ts
+public/
+    └── index.html
+scripts/
+    ├── create-demo-users.js
+    └── seed-demo.ts
+src/
+    └── dataconnect-generated/
+        ├── esm/
+            ├── index.esm.js
+            └── package.json
+        ├── react/
+            ├── esm/
+                ├── index.esm.js
+                └── package.json
+            ├── index.cjs.js
+            ├── index.d.ts
+            ├── package.json
+            └── README.md
+        ├── index.cjs.js
+        ├── index.d.ts
+        ├── package.json
+        └── README.md
+types/
+    ├── index.ts
+    └── teacher.ts
+utils/
+    ├── adaptive.ts
+    ├── practice.ts
+    └── scoring.ts
+.eslintrc.json
+.firebaserc
+.gitignore
+components.json
+eslint.config.mjs
+firebase.json
+firestore.indexes.json
+firestore.rules
+firestore.rules.new
+next.config.ts
+package-lock.json
+package.json
+postcss.config.mjs
+README.md
+tsconfig.json
 ```
 
 ---
@@ -77,7 +256,14 @@ learnsight/
     NEXT_PUBLIC_FIREBASE_API_KEY=your_key
     NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
     NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
-    OPENAI_API_KEY=your_openai_key # if using LLM
+    NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
+    NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
+    NEXT_PUBLIC_FIREBASE_APP_ID=
+    NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=
+
+    FIREBASE_PROJECT_ID=
+    FIREBASE_CLIENT_EMAIL=
+    FIREBASE_PRIVATE_KEY=
     ```
 
 4.  **Run the development server**

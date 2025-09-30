@@ -458,3 +458,21 @@ export async function getTeacherDashboardData(
     throw error;
   }
 }
+
+// Update student teacher assignment
+export async function updateStudentTeacherAssignment(
+  studentId: string,
+  teacherId: string
+): Promise<void> {
+  try {
+    const { doc, updateDoc } = await import("firebase/firestore");
+    const { db } = await import("@/lib/firebase");
+
+    await updateDoc(doc(db, "users", studentId), {
+      teacherId: teacherId
+    });
+  } catch (error) {
+    console.error("Error updating student teacher assignment:", error);
+    throw new Error(`Failed to update student teacher assignment: ${error instanceof Error ? error.message : "Unknown error"}`);
+  }
+}
