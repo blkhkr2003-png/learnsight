@@ -2,13 +2,21 @@ import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import admin from "@/lib/firebase-admin";
 import { verifyAuthHeader } from "@/lib/auth";
-import { UserDoc, DiagnosticAttempt, Fundamental, PracticeSessionDoc } from "@/types";
+import {
+  UserDoc,
+  DiagnosticAttempt,
+  Fundamental,
+  PracticeSessionDoc,
+} from "@/types";
 import { TeacherAlertDoc } from "@/types/teacher";
 
 // Helpers
 async function assertTeacherOrAdmin(requesterUid: string, teacherId: string) {
   if (requesterUid === teacherId) return; // self
-  const requesterSnap = await adminDb.collection("users").doc(requesterUid).get();
+  const requesterSnap = await adminDb
+    .collection("users")
+    .doc(requesterUid)
+    .get();
   if (!requesterSnap.exists) throw new Error("FORBIDDEN");
   const role = requesterSnap.data()?.role;
   if (role !== "admin") throw new Error("FORBIDDEN");
@@ -73,20 +81,31 @@ export async function GET(req: Request, context: any) {
   try {
     const requesterUid = await verifyAuthHeader(req);
     const { id: teacherId } = await context.params;
-    if (!teacherId) return NextResponse.json({ success: false, error: "Missing teacher id" }, { status: 400 });
+    if (!teacherId)
+      return NextResponse.json(
+        { success: false, error: "Missing teacher id" },
+        { status: 400 }
+      );
 
     await assertTeacherOrAdmin(requesterUid, teacherId);
 
     // Teacher doc
     const teacherSnap = await adminDb.collection("users").doc(teacherId).get();
-    if (!teacherSnap.exists) return NextResponse.json({ success: false, error: "Teacher not found" }, { status: 404 });
+    if (!teacherSnap.exists)
+      return NextResponse.json(
+        { success: false, error: "Teacher not found" },
+        { status: 404 }
+      );
     const teacher = safeUser(teacherSnap);
 
     // Resolve class name if any
     let className = "My Students";
     if (teacher.classId) {
       try {
-        const classSnap = await adminDb.collection("classes").doc(teacher.classId).get();
+        const classSnap = await adminDb
+          .collection("classes")
+          .doc(teacher.classId)
+          .get();
         const cname = classSnap.data()?.name;
         if (cname) className = cname;
       } catch (e) {
@@ -148,10 +167,12 @@ export async function GET(req: Request, context: any) {
       recentStudents.push({
         id: student.uid,
         name: student.name,
-        lastDiagnostic: attempt.completedAt.toDate?.().toISOString?.().split("T")[0] ?? null,
+        lastDiagnostic:
+          attempt.completedAt.toDate?.().toISOString?.().split("T")[0] ?? null,
         weakestSkill: weakest.charAt(0).toUpperCase() + weakest.slice(1),
         progress: avg,
-        status: avg >= 85 ? "excellent" : avg >= 70 ? "active" : "needs-attention",
+        status:
+          avg >= 85 ? "excellent" : avg >= 70 ? "active" : "needs-attention",
         trend: Math.random() > 0.5 ? "up" : "down",
       });
     }
@@ -159,7 +180,9 @@ export async function GET(req: Request, context: any) {
     // Active students in last 7 days from practiceSessions
     let activeStudents = 0;
     if (studentIds.length > 0) {
-      const since = admin.firestore.Timestamp.fromDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+      const since = admin.firestore.Timestamp.fromDate(
+        new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+      );
       const activeSet = new Set<string>();
       for (let i = 0; i < studentIds.length; i += batchSize) {
         const batch = studentIds.slice(i, i + batchSize);
@@ -183,13 +206,18 @@ export async function GET(req: Request, context: any) {
       .orderBy("createdAt", "desc")
       .limit(10)
       .get();
-    const alerts = alertsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as TeacherAlertDoc) }));
+    const alerts = alertsSnap.docs.map((d) => ({
+      docId: d.id,
+      ...(d.data() as TeacherAlertDoc),
+    }));
 
     // Aggregations
     const classStats = calculateClassStats(allAttempts as any);
     const avgScore = calculateAverageScore(allAttempts as any);
     const studentsWithAttempts = new Set(
-      allAttempts.filter((a) => (a as any).completedAt).map((a) => (a as any).userId)
+      allAttempts
+        .filter((a) => (a as any).completedAt)
+        .map((a) => (a as any).userId)
     ).size;
     const completionRate = students.length
       ? Math.round((studentsWithAttempts / students.length) * 100)
@@ -209,23 +237,37 @@ export async function GET(req: Request, context: any) {
       },
     });
   } catch (err: any) {
-    if (err?.message === "MISSING_AUTH_HEADER" || err?.message === "INVALID_AUTH_TOKEN") {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    if (
+      err?.message === "MISSING_AUTH_HEADER" ||
+      err?.message === "INVALID_AUTH_TOKEN"
+    ) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
     }
     if (err?.message === "FORBIDDEN") {
-      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+      return NextResponse.json(
+        { success: false, error: "Forbidden" },
+        { status: 403 }
+      );
     }
     console.error("GET /api/teacher/[id]/dashboard error", err);
     console.error("Error stack:", err?.stack);
 
     // Return more detailed error information in development mode
-    const isDevelopment = process.env.NODE_ENV === 'development';
-    const errorDetails = isDevelopment ? (err?.message || "Unknown error") : "Server error occurred";
+    const isDevelopment = process.env.NODE_ENV === "development";
+    const errorDetails = isDevelopment
+      ? err?.message || "Unknown error"
+      : "Server error occurred";
 
-    return NextResponse.json({ 
-      success: false, 
-      error: "Server error",
-      details: errorDetails
-    }, { status: 500 });
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Server error",
+        details: errorDetails,
+      },
+      { status: 500 }
+    );
   }
 }

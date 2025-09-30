@@ -55,6 +55,11 @@ const sidebarItems = [
     label: "Reports",
     icon: <FileText className="h-4 w-4" />,
   },
+  {
+    href: "/student/profile",
+    label: "My Profile",
+    icon: <FileText className="h-4 w-4" />,
+  },
 ];
 
 export default function StudentDashboard() {

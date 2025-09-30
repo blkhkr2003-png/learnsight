@@ -37,6 +37,7 @@ export default function LoginPage() {
   const [signupName, setSignupName] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
+  const [signupTeacherId, setSignupTeacherId] = useState<string | undefined>();
   const [role, setRole] = useState<Role | "">("");
 
   const router = useRouter();
@@ -182,6 +183,8 @@ export default function LoginPage() {
           email: signupEmail,
           password: signupPassword,
           role,
+          // Only include teacherId if it's provided and the role is student
+          ...(role === "student" && signupTeacherId ? { teacherId: signupTeacherId } : {}),
         }),
       });
 
@@ -219,6 +222,7 @@ export default function LoginPage() {
     setSignupEmail("");
     setSignupPassword("");
     setSignupName("");
+    setSignupTeacherId(undefined);
   };
 
   return (
@@ -416,6 +420,28 @@ export default function LoginPage() {
                       />
                     </div>
                   </div>
+
+                  {/* Teacher ID field - only shown for students */}
+                  {role === "student" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="teacherId-signup">Teacher ID (Optional)</Label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="teacherId-signup"
+                          type="text"
+                          placeholder="Enter your teacher's ID"
+                          value={signupTeacherId || ""}
+                          onChange={(e) => setSignupTeacherId(e.target.value)}
+                          className="pl-10"
+                          autoComplete="off"
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        If you have a teacher, enter their ID to connect your accounts
+                      </p>
+                    </div>
+                  )}
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? "Creating account..." : "Create Account"}
                   </Button>
