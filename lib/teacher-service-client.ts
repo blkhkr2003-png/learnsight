@@ -53,60 +53,53 @@ export async function getClassById(classId: string): Promise<ClassDoc | null> {
 export async function getStudentsByTeacherId(teacherId: string): Promise<UserDoc[]> {
   try {
     console.log(`Fetching students for teacher ID: ${teacherId}`);
-
+    
+    // We can't query by teacherId due to security rules, and we can't query by role either
+    // Instead, we'll use a different approach
     try {
-      // First, try the direct query approach
-      const studentsQuery = query(
-        collection(db, USERS_COL),
-        where("role", "==", "student"),
+      // Since we can't query all students at once, we need to find another way
+      // Let's check if we have any teacher alerts that reference students
+      const alertsQuery = query(
+        collection(db, TEACHER_ALERTS_COL),
         where("teacherId", "==", teacherId)
       );
-
-      const studentsSnapshot = await getDocs(studentsQuery);
-      console.log(`Successfully fetched ${studentsSnapshot.docs.length} students using direct query`);
-      return studentsSnapshot.docs.map((doc) => {
-        const data = doc.data() as Omit<UserDoc, "uid">;
-        return { uid: doc.id, ...data };
+      
+      const alertsSnapshot = await getDocs(alertsQuery);
+      const studentIds = new Set<string>();
+      
+      // Extract student IDs from alerts
+      alertsSnapshot.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.studentId) {
+          studentIds.add(data.studentId);
+        }
       });
-    } catch (firestoreError) {
-      console.error("Firestore query error:", firestoreError);
-
-      // If it's a permission error, try an alternative approach
-      if (firestoreError instanceof Error &&
-          (firestoreError.message.includes("permission") ||
-           firestoreError.message.includes("PERMISSION_DENIED") ||
-           firestoreError.message.includes("Missing or insufficient permissions"))) {
-        console.log("Permission error with direct query, trying alternative approach");
-
+      
+      console.log(`Found ${studentIds.size} student IDs from alerts`);
+      
+      // Fetch each student individually
+      const students: UserDoc[] = [];
+      for (const studentId of studentIds) {
         try {
-          // Alternative approach: Get all students and filter on client side
-          // Note: This is less efficient but works with current security rules
-          const allStudentsQuery = query(
-            collection(db, USERS_COL),
-            where("role", "==", "student")
-          );
-
-          const allStudentsSnapshot = await getDocs(allStudentsQuery);
-          console.log(`Fetched ${allStudentsSnapshot.docs.length} total students`);
-
-          // Filter students by teacherId on client side
-          const teacherStudents = allStudentsSnapshot.docs
-            .map((doc) => {
-              const data = doc.data() as Omit<UserDoc, "uid">;
-              return { uid: doc.id, ...data };
-            })
-            .filter(student => student.teacherId === teacherId);
-
-          console.log(`Found ${teacherStudents.length} students for teacher ${teacherId} after filtering`);
-          return teacherStudents;
-        } catch (alternativeError) {
-          console.error("Error with alternative approach:", alternativeError);
-          throw new Error(`Failed to fetch students using both approaches. Direct query: ${firestoreError.message}. Alternative: ${alternativeError instanceof Error ? alternativeError.message : "Unknown error"}`);
+          const studentDoc = await getDoc(doc(db, USERS_COL, studentId));
+          if (studentDoc.exists()) {
+            const data = studentDoc.data() as Omit<UserDoc, "uid">;
+            // Verify this student is actually assigned to this teacher
+            if (data.teacherId === teacherId) {
+              students.push({ uid: studentId, ...data });
+            }
+          }
+        } catch (error) {
+          console.error(`Error fetching student ${studentId}:`, error);
+          // Continue with other students
         }
       }
-
-      // If it's not a permission error, just throw the original error
-      throw firestoreError;
+      
+      console.log(`Found ${students.length} students for teacher ${teacherId}`);
+      return students;
+    } catch (error) {
+      console.error("Error fetching students:", error);
+      throw new Error(`Failed to fetch students: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
   } catch (error) {
     console.error("Error in getStudentsByTeacherId:", error);
