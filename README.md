@@ -40,12 +40,6 @@ LearnSight is an adaptive learning platform that diagnoses student strengths and
 
 ```bash
 learnsight/
-.firebase/
-    └── hosting.cHVibGlj.cache
-.github/
-    └── workflows/
-        ├── firebase-hosting-merge.yml
-        └── firebase-hosting-pull-request.yml
 app/
     ├── api/
         ├── auth/
@@ -161,20 +155,6 @@ components/
     └── radar-chart.tsx
 contexts/
     └── user-context.tsx
-dataconnect/
-    ├── example/
-        ├── connector.yaml
-        ├── mutations.gql
-        └── queries.gql
-    ├── schema/
-        └── schema.gql
-    └── dataconnect.yaml
-dist/
-    ├── scripts/
-        └── seed-demo.js
-    ├── types/
-        └── index.js
-    └── seed-demo.js
 lib/
     ├── auth-context.tsx
     ├── auth.ts
@@ -186,28 +166,9 @@ lib/
     ├── teacher-service-client.ts
     ├── teacher-service.ts
     └── utils.ts
-public/
-    └── index.html
 scripts/
     ├── create-demo-users.js
     └── seed-demo.ts
-src/
-    └── dataconnect-generated/
-        ├── esm/
-            ├── index.esm.js
-            └── package.json
-        ├── react/
-            ├── esm/
-                ├── index.esm.js
-                └── package.json
-            ├── index.cjs.js
-            ├── index.d.ts
-            ├── package.json
-            └── README.md
-        ├── index.cjs.js
-        ├── index.d.ts
-        ├── package.json
-        └── README.md
 types/
     ├── index.ts
     └── teacher.ts
@@ -216,14 +177,11 @@ utils/
     ├── practice.ts
     └── scoring.ts
 .eslintrc.json
-.firebaserc
 .gitignore
 components.json
 eslint.config.mjs
-firebase.json
 firestore.indexes.json
 firestore.rules
-firestore.rules.new
 next.config.ts
 package-lock.json
 package.json
