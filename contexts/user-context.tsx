@@ -17,6 +17,7 @@ interface UserContextType {
   role: UserRole;
   isApproved: boolean;
   loading: boolean;
+  user: User | null;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -27,6 +28,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     role: "student",
     isApproved: false,
     loading: true,
+    user: null,
   });
 
   useEffect(() => {
@@ -53,6 +55,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
               role: data.role as UserRole,
               isApproved: data.isApproved,
               loading: false,
+              user: user,
             });
           } else {
             // Server rejected
@@ -61,6 +64,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
               role: "student",
               isApproved: false,
               loading: false,
+              user: null,
             });
           }
         } else {
@@ -70,6 +74,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
             role: "student",
             isApproved: false,
             loading: false,
+            user: null,
           });
         }
       } catch (err) {
@@ -79,6 +84,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           role: "student",
           isApproved: false,
           loading: false,
+          user: null,
         });
       }
     });

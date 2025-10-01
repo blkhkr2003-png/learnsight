@@ -93,7 +93,7 @@ const getStatusLabel = (status: string) => {
 };
 
 export default function StudentsPage() {
-  const { uid, loading: authLoading } = useUser();
+  const { uid, user, loading: authLoading } = useUser();
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -123,26 +123,40 @@ export default function StudentsPage() {
         console.log("Current user UID:", auth.currentUser.uid);
         console.log("Teacher UID from context:", uid);
 
-        // Use client-side teacher service to fetch students directly
-        const { getStudentsByTeacherId } = await import("@/lib/teacher-service-client");
-        console.log("Calling getStudentsByTeacherId...");
+        // Get the current user's ID token for API authentication
+        const idToken = await auth.currentUser!.getIdToken();
 
-        const studentsData = await getStudentsByTeacherId(uid);
-        console.log("Students data received:", studentsData);
+        // Fetch students from the API
+        const response = await fetch(`/api/teacher/${uid}/students`, {
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+          },
+        });
 
-        setStudents(studentsData);
-        console.log("Students state updated");
-      } catch (err) {
-        console.error('Error fetching students:', err);
-        console.error('Error type:', typeof err);
-        console.error('Error details:', JSON.stringify(err, null, 2));
+        if (!response.ok) {
+          throw new Error(`API request failed with status ${response.status}`);
+        }
 
-        let errorMessage = 'An error occurred while fetching students';
-        if (err instanceof Error) {
-          errorMessage += ': ' + err.message;
-          console.error('Error stack:', err.stack);
+        const data = await response.json();
+        console.log("Students data received:", data);
+
+        if (data.success && data.students) {
+          setStudents(data.students);
+          console.log("Students state updated");
         } else {
-          errorMessage += ': ' + String(err);
+          throw new Error("Invalid response format");
+        }
+      } catch (err) {
+        console.error("Error fetching students:", err);
+        console.error("Error type:", typeof err);
+        console.error("Error details:", JSON.stringify(err, null, 2));
+
+        let errorMessage = "An error occurred while fetching students";
+        if (err instanceof Error) {
+          errorMessage += ": " + err.message;
+          console.error("Error stack:", err.stack);
+        } else {
+          errorMessage += ": " + String(err);
         }
 
         setError(errorMessage);
@@ -169,7 +183,7 @@ export default function StudentsPage() {
         <DashboardLayout
           sidebarItems={sidebarItems}
           userRole="teacher"
-          userName="Ms. Sarah Johnson"
+          userName={user?.displayName || "Loading..."} // ✅
         >
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
@@ -188,12 +202,14 @@ export default function StudentsPage() {
         <DashboardLayout
           sidebarItems={sidebarItems}
           userRole="teacher"
-          userName="Ms. Sarah Johnson"
+          userName={user?.displayName || "Loading..."}
         >
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
               <p className="text-red-500 mb-4">{error}</p>
-              <Button onClick={() => window.location.reload()}>Try Again</Button>
+              <Button onClick={() => window.location.reload()}>
+                Try Again
+              </Button>
             </div>
           </div>
         </DashboardLayout>
@@ -206,7 +222,7 @@ export default function StudentsPage() {
       <DashboardLayout
         sidebarItems={sidebarItems}
         userRole="teacher"
-        userName="Ms. Sarah Johnson"
+        userName={user?.displayName || "Loading..."}
       >
         <div className="space-y-8">
           {/* Header */}
@@ -228,22 +244,45 @@ export default function StudentsPage() {
                 <Download className="h-4 w-4 mr-2" />
                 Export Data
               </Button>
-              <Button 
+              <Button
                 onClick={async () => {
                   // This would open a modal to add a new student
                   const studentId = prompt("Enter student ID to assign:");
                   if (studentId && uid) {
                     try {
-                      // Use client-side teacher service to assign student
-                      const { updateStudentTeacherAssignment } = await import("@/lib/teacher-service-client");
+                      // Get the current user's ID token for API authentication
+                      const { auth } = await import("@/lib/firebase");
+                      const idToken = await auth.currentUser!.getIdToken();
 
-                      await updateStudentTeacherAssignment(studentId, uid);
+                      // Call the API to assign the student
+                      const response = await fetch(
+                        `/api/teacher/${uid}/students`,
+                        {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${idToken}`,
+                          },
+                          body: JSON.stringify({ studentId }),
+                        }
+                      );
 
-                      alert('Student assigned successfully!');
-                      window.location.reload();
+                      if (!response.ok) {
+                        throw new Error(
+                          `API request failed with status ${response.status}`
+                        );
+                      }
+
+                      const data = await response.json();
+                      if (data.success) {
+                        alert("Student assigned successfully!");
+                        window.location.reload();
+                      } else {
+                        throw new Error("Failed to assign student");
+                      }
                     } catch (error) {
-                      console.error('Error:', error);
-                      alert('An error occurred while assigning student');
+                      console.error("Error:", error);
+                      alert("An error occurred while assigning student");
                     }
                   }
                 }}
@@ -369,21 +408,53 @@ export default function StudentsPage() {
                             variant="outline"
                             size="sm"
                             onClick={async () => {
-                              if (confirm(`Are you sure you want to remove ${student.name} from your class?`) && uid) {
+                              if (
+                                confirm(
+                                  `Are you sure you want to remove ${student.name} from your class?`
+                                ) &&
+                                uid
+                              ) {
                                 try {
-                                  // Use client-side Firebase to remove student assignment
-                                  const { doc, updateDoc, deleteField } = await import("firebase/firestore");
-                                  const { db } = await import("@/lib/firebase");
+                                  // Get the current user's ID token for API authentication
+                                  const { auth } = await import(
+                                    "@/lib/firebase"
+                                  );
+                                  const idToken =
+                                    await auth.currentUser!.getIdToken();
 
-                                  await updateDoc(doc(db, "users", student.id), {
-                                    teacherId: deleteField()
-                                  });
+                                  // Call the API to remove the student
+                                  const response = await fetch(
+                                    `/api/teacher/${uid}/students`,
+                                    {
+                                      method: "DELETE",
+                                      headers: {
+                                        "Content-Type": "application/json",
+                                        Authorization: `Bearer ${idToken}`,
+                                      },
+                                      body: JSON.stringify({
+                                        studentId: student.id,
+                                      }),
+                                    }
+                                  );
 
-                                  alert('Student removed successfully!');
+                                  if (!response.ok) {
+                                    throw new Error(
+                                      `API request failed with status ${response.status}`
+                                    );
+                                  }
+
+                                  const data = await response.json();
+                                  if (!data.success) {
+                                    throw new Error("Failed to remove student");
+                                  }
+
+                                  alert("Student removed successfully!");
                                   window.location.reload();
                                 } catch (error) {
-                                  console.error('Error:', error);
-                                  alert('An error occurred while removing student');
+                                  console.error("Error:", error);
+                                  alert(
+                                    "An error occurred while removing student"
+                                  );
                                 }
                               }
                             }}
@@ -440,11 +511,11 @@ export default function StudentsPage() {
                                   Listening Skills
                                 </span>
                                 <span className="text-sm text-muted-foreground">
-                                  {student.fundamentals.listening}%
+                                  {student.fundamentals?.listening || 0}%
                                 </span>
                               </div>
                               <Progress
-                                value={student.fundamentals.listening}
+                                value={student.fundamentals?.listening || 0}
                                 className="h-2"
                               />
                             </div>
@@ -454,11 +525,11 @@ export default function StudentsPage() {
                                   Grasping Power
                                 </span>
                                 <span className="text-sm text-muted-foreground">
-                                  {student.fundamentals.grasping}%
+                                  {student.fundamentals?.grasping || 0}%
                                 </span>
                               </div>
                               <Progress
-                                value={student.fundamentals.grasping}
+                                value={student.fundamentals?.grasping || 0}
                                 className="h-2"
                               />
                             </div>
@@ -468,11 +539,11 @@ export default function StudentsPage() {
                                   Retention Power
                                 </span>
                                 <span className="text-sm text-muted-foreground">
-                                  {student.fundamentals.retention}%
+                                  {student.fundamentals?.retention || 0}%
                                 </span>
                               </div>
                               <Progress
-                                value={student.fundamentals.retention}
+                                value={student.fundamentals?.retention || 0}
                                 className="h-2"
                               />
                             </div>
@@ -482,11 +553,11 @@ export default function StudentsPage() {
                                   Practice Application
                                 </span>
                                 <span className="text-sm text-muted-foreground">
-                                  {student.fundamentals.application}%
+                                  {student.fundamentals?.application || 0}%
                                 </span>
                               </div>
                               <Progress
-                                value={student.fundamentals.application}
+                                value={student.fundamentals?.application || 0}
                                 className="h-2"
                               />
                             </div>
