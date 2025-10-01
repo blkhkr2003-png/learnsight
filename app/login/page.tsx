@@ -207,7 +207,9 @@ export default function LoginPage() {
           password: signupPassword,
           role,
           // Only include teacherId if it's provided and the role is student
-          ...(role === "student" && signupTeacherId ? { teacherId: signupTeacherId } : {}),
+          ...(role === "student" && signupTeacherId
+            ? { teacherId: signupTeacherId }
+            : {}),
         }),
       });
 
@@ -224,11 +226,7 @@ export default function LoginPage() {
       }
 
       // If approved, sign in the user
-      await signInWithEmailAndPassword(
-        auth,
-        signupEmail,
-        signupPassword
-      );
+      await signInWithEmailAndPassword(auth, signupEmail, signupPassword);
 
       router.push(`/${role}/dashboard`);
     } catch (err: any) {
@@ -447,7 +445,9 @@ export default function LoginPage() {
                   {/* Teacher ID field - only shown for students */}
                   {role === "student" && (
                     <div className="space-y-2">
-                      <Label htmlFor="teacherId-signup">Teacher ID (Optional)</Label>
+                      <Label htmlFor="teacherId-signup">
+                        Teacher ID (Optional)
+                      </Label>
                       <div className="relative">
                         <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                         <Input
@@ -461,7 +461,8 @@ export default function LoginPage() {
                         />
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        If you have a teacher, enter their ID to connect your accounts
+                        If you have a teacher, enter their ID to connect your
+                        accounts
                       </p>
                     </div>
                   )}
@@ -489,13 +490,13 @@ export default function LoginPage() {
             </h3>
             <div className="text-xs text-muted-foreground space-y-1">
               <p>
-                <strong>Student:</strong> ram@demo.com / password
+                <strong>Student:</strong> student2@gmail.com / password
               </p>
               <p>
-                <strong>Teacher:</strong> teacher@demo.com / password
+                <strong>Teacher:</strong> teacher1@gmail.com / password
               </p>
               <p>
-                <strong>Parent:</strong> parent@demo.com / password
+                <strong>Parent:</strong> parent1@gmail.com / password
               </p>
             </div>
           </CardContent>
