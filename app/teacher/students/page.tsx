@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { useUser } from "@/contexts/user-context";
 import { auth } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import type { User } from "firebase/auth";
 import AuthGuard from "@/components/auth-guard";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
@@ -102,6 +104,10 @@ export default function StudentsPage() {
   const [selectedStudent, setSelectedStudent] = useState<number | null>(null);
 
   useEffect(() => {
+    // Create an AbortController to cancel stale requests
+    const abortController = new AbortController();
+    const { signal } = abortController;
+
     const fetchStudents = async () => {
       if (!uid) {
         console.log("No UID available, skipping fetch");
@@ -111,26 +117,49 @@ export default function StudentsPage() {
       try {
         console.log("Fetching students for teacher ID:", uid);
         setLoading(true);
+        setError("");
 
-        // Check if we have a valid Firebase auth user
-        const { auth } = await import("@/lib/firebase");
-        if (!auth.currentUser) {
-          console.error("No authenticated user found");
-          setError("You must be logged in to view students");
-          return;
+        // Wait for Firebase auth state to be ready
+        let currentUser = auth.currentUser;
+        if (!currentUser) {
+          console.log("Auth state not ready, waiting for onAuthStateChanged...");
+          currentUser = await new Promise<User>((resolve, reject) => {
+            const unsubscribe = onAuthStateChanged(
+              auth,
+              (user: User | null) => {
+                unsubscribe();
+                if (user) {
+                  resolve(user);
+                } else {
+                  reject(new Error("No authenticated user found"));
+                }
+              },
+              (error: any) => {
+                unsubscribe();
+                reject(error);
+              }
+            );
+
+            // Set a timeout to prevent infinite waiting
+            setTimeout(() => {
+              unsubscribe();
+              reject(new Error("Authentication timeout"));
+            }, 5000);
+          });
         }
 
-        console.log("Current user UID:", auth.currentUser.uid);
+        console.log("Current user UID:", currentUser.uid);
         console.log("Teacher UID from context:", uid);
 
         // Get the current user's ID token for API authentication
-        const idToken = await auth.currentUser!.getIdToken();
+        const idToken = await currentUser.getIdToken();
 
         // Fetch students from the API
         const response = await fetch(`/api/teacher/${uid}/students`, {
           headers: {
             Authorization: `Bearer ${idToken}`,
           },
+          signal, // Pass the AbortController signal
         });
 
         if (!response.ok) {
@@ -140,13 +169,31 @@ export default function StudentsPage() {
         const data = await response.json();
         console.log("Students data received:", data);
 
+        // Handle different response formats
+        let studentsData = [];
         if (data.success && data.students) {
-          setStudents(data.students);
-          console.log("Students state updated");
+          // Format: { success: true, students: [...] }
+          studentsData = data.students;
+        } else if (Array.isArray(data)) {
+          // Format: Direct array of students
+          studentsData = data;
+        } else if (data.data && Array.isArray(data.data)) {
+          // Format: { data: [...] }
+          studentsData = data.data;
         } else {
+          console.error("Unexpected response format:", data);
           throw new Error("Invalid response format");
         }
+
+        setStudents(studentsData);
+        console.log("Students state updated with", studentsData.length, "students");
       } catch (err) {
+        // Don't update state if the request was aborted
+        if (signal.aborted) {
+          console.log("Fetch aborted");
+          return;
+        }
+
         console.error("Error fetching students:", err);
         console.error("Error type:", typeof err);
         console.error("Error details:", JSON.stringify(err, null, 2));
@@ -161,11 +208,19 @@ export default function StudentsPage() {
 
         setError(errorMessage);
       } finally {
-        setLoading(false);
+        // Don't update state if the request was aborted
+        if (!signal.aborted) {
+          setLoading(false);
+        }
       }
     };
 
     fetchStudents();
+
+    // Cleanup function to abort the request when the component unmounts
+    return () => {
+      abortController.abort();
+    };
   }, [uid]);
 
   const filteredStudents = students.filter((student) => {
@@ -471,7 +526,7 @@ export default function StudentsPage() {
           </Card>
 
           {/* Student Detail Modal/Card */}
-          {selectedStudent && (
+          {selectedStudent !== null && (
             <Card className="border-border bg-card">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
