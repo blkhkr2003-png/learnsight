@@ -271,7 +271,7 @@ flowchart TD
 
 ## 👥 Team & Credits
 
-Built with ❤️ by **[Your Team Name]** for **[Hackathon Name]**.
+Built with ❤️ by **[BrainBots]** for **[Ai for Education]**.
 
 ---
 
