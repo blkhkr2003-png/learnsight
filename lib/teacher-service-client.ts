@@ -402,7 +402,7 @@ export async function getTeacherDashboardData(
     }
 
     // Get diagnostic attempts for these students
-    let attempts;
+    let attempts: DiagnosticAttempt[] = [];
     try {
       const studentIds = students.map((s) => s.uid);
       attempts = await getDiagnosticAttemptsByStudentIds(studentIds);
@@ -414,7 +414,7 @@ export async function getTeacherDashboardData(
     }
 
     // Get recent student data
-    let recentStudents;
+    let recentStudents: RecentStudent[] = [];
     try {
       recentStudents = await getRecentDiagnosticAttemptsForStudents(students);
       console.log(`Generated recent student data for ${recentStudents.length} students`);
@@ -425,7 +425,7 @@ export async function getTeacherDashboardData(
     }
 
     // Get teacher alerts
-    let alerts;
+    let alerts: Alert[] = [];
     try {
       alerts = await getTeacherAlerts(teacherId);
       console.log(`Found ${alerts.length} alerts for teacher`);
@@ -447,7 +447,8 @@ export async function getTeacherDashboardData(
     return {
       name: teacher.name,
       className,
-      studentCount: students.length,
+      totalStudents: students.length,
+      studentsCompleted: students.length, // Assuming all students have completed
       classStats,
       averageScore,
       recentStudents,

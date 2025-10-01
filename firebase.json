@@ -8,12 +8,18 @@
     "source": "dataconnect"
   },
   "firestore": {
+    "database": "(default)",
+    "location": "asia-south1",
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
   "hosting": {
-    "public": "out",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "public": "public",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
     "rewrites": [
       {
         "source": "**",

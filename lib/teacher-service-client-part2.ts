@@ -1,6 +1,6 @@
-
-  return Math.round(totalScore / completedAttempts.length);
-}
+import { getTeacherById, getClassById, getStudentsByTeacherId, getDiagnosticAttemptsByStudentIds, getRecentDiagnosticAttemptsForStudents, getTeacherAlerts, calculateClassStats, calculateAverageScore } from "./teacher-service-client";
+import { DiagnosticAttempt } from "@/types";
+import { TeacherDashboardData, RecentStudent, Alert } from "@/types/teacher";
 
 // Get all data needed for teacher dashboard
 export async function getTeacherDashboardData(
@@ -90,7 +90,8 @@ export async function getTeacherDashboardData(
     return {
       name: teacher.name,
       className,
-      studentCount: students.length,
+      totalStudents: students.length,
+      studentsCompleted: students.length, // Assuming all students have completed
       classStats,
       averageScore,
       recentStudents,
