@@ -26,9 +26,8 @@ LearnSight is an adaptive learning platform that diagnoses student strengths and
 ### Backend & Infra
 
 - [Firebase Auth](https://firebase.google.com/docs/auth) – Authentication
-- [Firestore](https://firebase.google.com/docs/firestore) – Database
-- [Firebase Cloud Functions](https://firebase.google.com/docs/functions) – Adaptive logic
-- [Vercel](https://vercel.com) – Frontend hosting
+- [Firestore](https://firebase.google.com/docs/firestore) – Database & Adaptive logic
+- [Render](https://render.com) – Hosting
 
 ### Optional AI/ML Layer
 
